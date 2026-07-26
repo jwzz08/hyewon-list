@@ -1,0 +1,1 @@
+{"firestore":{"rules":"firestore.rules"},"flutter":{"platforms":{"dart":{"lib/firebase_options.dart":{"projectId":"hyewon-list","configurations":{"ios":"1:318530031288:ios:2bc19f6b9fcd2703d66e4d","macos":"1:318530031288:ios:2bc19f6b9fcd2703d66e4d","web":"1:318530031288:web:f72e1a2790f0aa8cd66e4d","windows":"1:318530031288:web:584d5fd59dc707a7d66e4d"}}}}}}

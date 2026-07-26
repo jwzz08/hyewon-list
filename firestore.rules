@@ -1,0 +1,21 @@
+rules_version = '2';
+
+// Matches FirebaseSyncRepository's document layout exactly:
+// /users/{uid}/{tasks|calendarEvents|categories|tags|themePresets|settings}/{docId}
+// — every syncable collection lives under the signed-in user's own uid, so
+// one rule covers all of them. `request.auth.uid` is populated for both
+// anonymous and permanent (email/password) sessions — see
+// lib/data/sync/auth_service.dart — so this doesn't need a separate branch
+// for either case.
+//
+// A brand-new Firestore database defaults to denying everything until rules
+// are published here, which is what produces the app's
+// "[cloud_firestore/permission-denied] Missing or insufficient permissions"
+// error on "Sync now" until this file (or equivalent rules) is deployed.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

@@ -1,0 +1,165 @@
+name: hyewon_list
+description: >
+  hyewon_list — a personal desktop widget-style to-do list and calendar planner.
+  Local-first on Windows desktop, architected for future iOS/web sync.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # --- State management ---
+  flutter_riverpod: ^2.6.1
+
+  # --- Local database (offline-first, plaintext — see ARCHITECTURE.md §7) ---
+  # TODO(security): encryption-at-rest was attempted twice and reverted both
+  # times — see ARCHITECTURE.md "Windows native TODOs" for the full story
+  # (SQLite3MultipleCiphers via sqlite3 3.x/build hooks broke build_runner;
+  # classic sqlcipher_flutter_libs has its own Windows OpenSSL/CMake
+  # friction and wasn't attempted). Accepted as a known gap for now.
+  drift: ^2.20.3
+  sqlite3_flutter_libs: ^0.5.24
+  # Exact-pinned (not ^2.4.7). This was originally pinned on the (wrong)
+  # hypothesis that sqlite3 resolving to 2.9.4 was pulling in `hooks` —
+  # `dart pub deps` later proved that's NOT the case (see
+  # dependency_overrides below for the actual culprit). Left pinned anyway
+  # since 2.4.7 is the exact version this project has built successfully
+  # against all session; no reason to reintroduce an unverified variable.
+  sqlite3: 2.4.7
+  path_provider: ^2.1.4
+  path: ^1.9.0
+
+  # --- Desktop window management (Windows first, expandable) ---
+  # NOTE: bumped to 0.5.x for `setIgnoreMouseEvents` (click-through — see
+  # lib/platform/windows_native/global_hotkey_service.dart). If this breaks
+  # any other window_manager call used elsewhere in this file's history,
+  # check that call's signature against the 0.5.x changelog.
+  window_manager: ^0.5.2
+  # Already an indirect dependency of window_manager (bundled/compiled in
+  # already — see pubspec.lock) — declared directly here so main.dart can
+  # validate a restored window position actually lands on a currently
+  # connected monitor before trusting it (see main.dart's comment on the
+  # "runs but no window visible" bug). Pinned to the version already
+  # resolved transitively so this doesn't change anything else's resolution.
+  screen_retriever: 0.2.2
+  # TODO(windows-native): tray_manager gives a basic system tray icon + menu.
+  # Deep tray behavior (balloon notifications, custom icons per state) may need
+  # native Win32 work later — see ARCHITECTURE.md "Windows native TODOs".
+  tray_manager: ^0.2.3
+
+  # --- Fonts (design uses Quicksand for display, Nunito for body) ---
+  # TODO(offline): google_fonts fetches+caches on first run (needs network once).
+  # For a fully offline-first desktop app, replace with bundled .ttf assets in
+  # assets/fonts/ and declare them under the `fonts:` section below instead.
+  google_fonts: ^6.2.1
+
+  # --- Utilities ---
+  uuid: ^4.5.1
+  intl: ^0.19.0
+  collection: ^1.19.0
+  csv: ^6.0.0
+  # TODO(import-export): file_picker is used by ImportExportService to let the
+  # user choose where to save/open JSON+CSV files. Requires no native setup on
+  # Windows. See lib/features/import_export/application/import_export_service.dart
+  file_picker: ^8.1.2
+
+  # --- Firebase sync (optional — app runs fully offline without it) ---
+  # TODO(firebase-sync): if `flutter pub get` complains about missing
+  # Windows/desktop platform support for these, also run:
+  #   flutter pub add firebase_core_desktop cloud_firestore_desktop firebase_auth_desktop
+  # FlutterFire's desktop support is federated into separate `_desktop`
+  # packages on some release lines — the CLI (`flutterfire configure`,
+  # already run for this project — see lib/firebase_options.dart) normally
+  # adds these automatically, but pin them explicitly here if not.
+  firebase_core: ^3.15.2
+  cloud_firestore: ^5.6.12
+  firebase_auth: ^5.3.1
+
+  # --- Reminders/notifications (Windows toast) ---
+  # TODO(reminders): if these versions don't resolve, run
+  #   flutter pub add flutter_local_notifications timezone
+  # to pick the latest mutually-compatible versions — this plugin's Windows
+  # support (via the federated flutter_local_notifications_windows FFI
+  # package) is newer and versions faster than most deps in this file.
+  #
+  # MUST be >=19.0.0 — that's the exact release that added Windows support
+  # (WindowsInitializationSettings, InitializationSettings.windows) and
+  # dropped the old `uiLocalNotificationDateInterpretation` param from
+  # zonedSchedule(). NOTE: as of 19.5.0 (the version actually resolved here),
+  # FlutterLocalNotificationsPlugin.show/cancel/zonedSchedule still take
+  # id/title/body/scheduledDate/notificationDetails POSITIONALLY — only
+  # extras like payload/tag/androidScheduleMode are named. A fully-named
+  # overload only exists on the package's unreleased master branch, not any
+  # published 19.x — see local_notification_service.dart for the calls that
+  # actually match 19.5.0's real signatures.
+  flutter_local_notifications: ^19.0.0
+  timezone: ^0.10.1
+
+  # --- Windows-native extras (best-effort, no windows/runner/ C++ edits) ---
+  # TODO(windows-native): if these versions don't resolve, run
+  #   flutter pub add win32_registry hotkey_manager
+  # win32_registry is a pure-Dart FFI wrapper around the real Win32 registry
+  # API — no native build step. Used for "Start with Windows" (registry Run
+  # key). Click-through itself ended up using window_manager's own
+  # setIgnoreMouseEvents (see windows_window_service.dart) instead of raw
+  # win32 FFI, so the `win32` package isn't a direct dependency here.
+  # hotkey_manager registers the global Ctrl+Alt+H click-through toggle. See
+  # lib/platform/windows_native/ and ARCHITECTURE.md "Windows native TODOs".
+  #
+  # PINNED to 2.x (not the newer 3.x) because 3.x requires win32 ^6.0.0,
+  # which conflicts with file_picker's win32 ^5.5.1-^5.9.0 range (see
+  # https://github.com/miguelpruivo/flutter_file_picker/issues/1980 — still
+  # open as of writing). Revisit once file_picker ships a stable release on
+  # win32 ^6 (a 12.0.0 beta already has it) or win32_registry adds a
+  # lower bound supporting win32 5.x again.
+  win32_registry: ^2.1.0
+  hotkey_manager: ^0.2.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+  build_runner: ^2.4.13
+  drift_dev: ^2.20.3
+
+# --- Dependency overrides (real root cause of the build_runner hooks error) ---
+# `path_provider: ^2.1.4` transitively pulls in `path_provider_foundation`
+# (the iOS/macOS implementation) even though this app only targets Windows —
+# `flutter create --platforms=windows,ios,web,macos` scaffolded those other
+# platforms, so pub resolves their federated plugin implementations too.
+# Confirmed via `dart pub deps --style=compact | Select-String "objective_c"`:
+# path_provider_foundation 2.6.0 rewrote itself to call Foundation directly
+# via FFI (see its changelog), which requires the `objective_c` package,
+# which requires Dart's `hooks`/`code_assets` build-hooks mechanism — the
+# same thing that broke build_runner during the (reverted) sqlite3
+# encryption attempt. This has nothing to do with sqlite3/drift at all.
+#
+# path_provider_foundation 2.5.1 is the last version before that FFI rewrite
+# (plain Pigeon/platform-channel based, no objective_c/hooks dependency —
+# confirmed via its own pub.dev dependency list). Since this app never
+# actually runs on iOS/macOS, pinning this transitive dep to 2.5.1 is
+# functionally a no-op at runtime and just avoids pulling hooks into the
+# resolved graph. Safe to bump forward again once
+# https://github.com/dart-lang/build/issues/4343 is fixed upstream.
+dependency_overrides:
+  path_provider_foundation: 2.5.1
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/img/
+  # fonts:
+  #   - family: Quicksand
+  #     fonts:
+  #       - asset: assets/fonts/Quicksand-Bold.ttf
+  #         weight: 700
+  #   - family: Nunito
+  #     fonts:
+  #       - asset: assets/fonts/Nunito-Regular.ttf
+  #         weight: 400
+  #       - asset: assets/fonts/Nunito-SemiBold.ttf
+  #         weight: 600
