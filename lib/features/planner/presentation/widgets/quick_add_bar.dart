@@ -84,22 +84,39 @@ class _QuickAddBarState extends ConsumerState<QuickAddBar> {
           ...List.generate(7, (i) {
             final DateTime day = weekStart.add(Duration(days: i));
             final bool selected = i == _selectedDayIndex;
+            // Saturday and Sunday's short label both start with "S" — with
+            // "Start day of week" set to Sunday, those two identical-looking
+            // chips sit at opposite ENDS of this row (first and last), which
+            // made it easy to tap the wrong one while aiming for "Saturday"
+            // — the event/task would still save, just silently on Sunday
+            // instead. Color-coding them (Sat blue, Sun red, the usual
+            // weekend calendar convention) makes the two "S" chips
+            // distinguishable at a glance regardless of which end they land
+            // on for the current start-day setting.
+            final Color? weekendColor = day.weekday == DateTime.saturday
+                ? Colors.blue.shade600
+                : day.weekday == DateTime.sunday
+                    ? Colors.red.shade600
+                    : null;
             return GestureDetector(
               onTap: () => setState(() => _selectedDayIndex = i),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 1),
-                width: 19,
-                height: 19,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: selected ? AppColors.accent : AppColors.bgNeutral,
-                  shape: BoxShape.circle,
-                ),
-                child: Text(
-                  AppDateUtils.weekdayShortLabels[day.weekday - 1].substring(0, 1),
-                  style: AppTextStyles.meta(
-                    fontSize: 8.5,
-                    color: selected ? Colors.white : AppColors.textSecondary,
+              child: Tooltip(
+                message: AppDateUtils.weekdayShortLabels[day.weekday - 1],
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 1),
+                  width: 19,
+                  height: 19,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: selected ? AppColors.accent : AppColors.bgNeutral,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    AppDateUtils.weekdayShortLabels[day.weekday - 1].substring(0, 1),
+                    style: AppTextStyles.meta(
+                      fontSize: 8.5,
+                      color: selected ? Colors.white : (weekendColor ?? AppColors.textSecondary),
+                    ),
                   ),
                 ),
               ),

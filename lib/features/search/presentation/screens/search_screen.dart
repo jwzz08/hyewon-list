@@ -71,8 +71,15 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
         return AppDateUtils.isSameDay(date, now);
       case _DateFilter.thisWeek:
         final DateTime start = AppDateUtils.startOfWeek(now);
-        final DateTime end = start.add(const Duration(days: 6));
-        return !date.isBefore(start) && !date.isAfter(end);
+        // `end` is the last *inclusive calendar day*, not a precise cutoff
+        // instant — bump to the start of the following day before comparing
+        // (same fix as CalendarEventDao.watchInRange/RecurringEventService.
+        // generateOccurrences) so a calendar event's real time-of-day
+        // (`date` is `e.startDateTime` for events, not just a task's
+        // always-midnight `dueDate`) landing on the week's last day still
+        // matches instead of failing `!date.isAfter(end)`.
+        final DateTime exclusiveEnd = start.add(const Duration(days: 7));
+        return !date.isBefore(start) && date.isBefore(exclusiveEnd);
       case _DateFilter.thisMonth:
         return date.year == now.year && date.month == now.month;
       case _DateFilter.all:

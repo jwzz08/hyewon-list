@@ -25,8 +25,26 @@ class RecurringEventService {
     DateTime rangeEnd,
   ) {
     if (!event.isRecurring || event.recurrenceRule == null || event.recurrenceRule!.isEmpty) {
-      final bool overlaps = !event.endDateTime.isBefore(rangeStart) &&
-          !event.startDateTime.isAfter(rangeEnd);
+      // **Correction**: this used to compare straight against `rangeEnd` —
+      // callers (weekEndProvider, monthGridDatesProvider's `grid.last`, ...)
+      // pass that as the last *inclusive calendar day*, a bare date at
+      // midnight, not a precise cutoff instant. `!event.startDateTime.
+      // isAfter(rangeEnd)` then only matched events starting at exactly
+      // midnight on that day — any event with a real time of day (say 2pm)
+      // landing on the range's final day silently failed this check and
+      // never got expanded into an occurrence at all. This is exactly what
+      // made a Saturday event vanish from the weekly planner while still
+      // showing correctly in month view: with "Start day of week" set to
+      // Sunday, Saturday is the *last* day of every week's 7-day range, but
+      // essentially never the literal last cell of the month grid, so only
+      // the weekly view ever hit this boundary. Bumping to the start of the
+      // following day before comparing (same fix already applied to
+      // CalendarEventDao.watchInRange) makes this a real inclusive-day
+      // overlap test instead.
+      final DateTime exclusiveEnd =
+          AppDateUtils.dateOnly(rangeEnd).add(const Duration(days: 1));
+      final bool overlaps =
+          event.endDateTime.isAfter(rangeStart) && event.startDateTime.isBefore(exclusiveEnd);
       if (!overlaps) return const [];
       return [
         CalendarEventOccurrence(

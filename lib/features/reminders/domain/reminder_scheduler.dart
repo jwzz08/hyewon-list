@@ -133,7 +133,12 @@ class ReminderScheduler {
             ? event.location
             : 'Upcoming event',
         scheduledAt: fireAt,
-        payload: 'event:${event.id}',
+        // The occurrence's own date is appended (`event:<id>:<isoDate>`) —
+        // without it, tapping the notification had no way to tell RootShell
+        // *which* occurrence fired, so it always fell back to the series'
+        // first-ever date. See pendingOpenEventOccurrenceDateProvider's doc
+        // comment for the duplicate-looking-event bug that caused.
+        payload: 'event:${event.id}:${occurrence.occurrenceStart.toIso8601String()}',
       );
       scheduled++;
     }

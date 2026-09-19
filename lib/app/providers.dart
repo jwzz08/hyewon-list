@@ -181,10 +181,10 @@ final StateProvider<AppScreen> currentAppScreenProvider =
 // --- Notification tap-to-open ---
 //
 // Set by main.dart's NotificationService.onTapped listener (parsing the
-// `task:<id>` / `event:<id>` payload ReminderScheduler attaches — see
-// reminder_scheduler.dart) and consumed by RootShell, which fetches the
-// item and opens it in AddItemDialog's edit mode, then resets the value
-// back to null. A plain StateProvider (not a one-shot event/stream) is
+// `task:<id>` / `event:<id>:<occurrenceDateIso>` payload ReminderScheduler
+// attaches — see reminder_scheduler.dart) and consumed by RootShell, which
+// fetches the item and opens it in AddItemDialog's edit mode, then resets the
+// value back to null. A plain StateProvider (not a one-shot event/stream) is
 // deliberate: RootShell is always mounted, so "set it, then read+clear it"
 // is simpler here than plumbing a dedicated event bus.
 
@@ -195,3 +195,22 @@ final StateProvider<String?> pendingOpenTaskIdProvider = StateProvider<String?>(
 /// Non-null right after an event reminder notification is tapped — the
 /// tapped event's id.
 final StateProvider<String?> pendingOpenEventIdProvider = StateProvider<String?>((ref) => null);
+
+/// The specific occurrence date the tapped reminder was actually for — set
+/// alongside [pendingOpenEventIdProvider] whenever the payload carries one
+/// (recurring-event slot reminders always do; a plain single event's
+/// reminder doesn't need one since it only ever has one occurrence).
+///
+/// **Bug this fixes**: RootShell used to always open a recurring event's
+/// notification using the *series'* own `startDateTime` (its first-ever
+/// occurrence) as the edited occurrence, regardless of which actual
+/// occurrence's reminder fired. Picking "This event only" or "This and
+/// following" from the resulting edit then applied the change to that wrong
+/// (usually long-past) date instead of the one the user actually meant —
+/// creating a new detached event on the wrong day while the series kept
+/// producing the untouched occurrence the user was trying to edit, so the
+/// old and "modified" events both appeared to show up side by side. Reading
+/// the real occurrence date back out of the payload lets RootShell build the
+/// correct occurrence to edit.
+final StateProvider<DateTime?> pendingOpenEventOccurrenceDateProvider =
+    StateProvider<DateTime?>((ref) => null);

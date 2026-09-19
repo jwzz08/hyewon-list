@@ -83,6 +83,25 @@ class AppDateUtils {
     'Sun',
   ];
 
+  /// [weekdayShortLabels] rotated so index 0 is [startDayOfWeek] — matches
+  /// [buildMonthGridCells]'s/[daysOfWeek]'s own column order for the same
+  /// [startDayOfWeek].
+  ///
+  /// **Bug this fixes**: MonthlyCalendarGrid's header row used to render the
+  /// plain [weekdayShortLabels] list directly regardless of the user's
+  /// "Start day of week" setting. With Monday-start (the default) that
+  /// happens to line up, but switching the setting to Sunday-start shifts
+  /// every grid column over by one day while the header labels stay put —
+  /// e.g. the column actually containing Saturday's events/tasks ends up
+  /// sitting under a "Sun" header, and the column labeled "Sat" is really
+  /// Friday. Adding an event by tapping what reads as the Saturday cell
+  /// then silently lands it on Friday instead — this is why events "failed
+  /// to add" on Saturday specifically for anyone using the Sunday-start
+  /// setting, while to-dos (added via the date picker, not a grid tap)
+  /// were unaffected.
+  static List<String> weekdayLabelsFrom(int startDayOfWeek) =>
+      List.generate(7, (i) => weekdayShortLabels[(startDayOfWeek - 1 + i) % 7]);
+
   static const List<String> monthLabels = [
     'January',
     'February',

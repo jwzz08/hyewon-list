@@ -112,7 +112,52 @@ class _DataSettingsSectionState extends ConsumerState<DataSettingsSection> {
         const _AccountRow(),
         const SizedBox(height: 10),
         const _SyncRow(),
+        const SizedBox(height: 18),
+        const Divider(height: 1),
+        const SizedBox(height: 14),
+        const _DangerZoneSection(),
       ],
+    );
+  }
+}
+
+/// "Delete account" on its own, clearly-separated section at the very bottom
+/// of Settings > Data — previously it sat as a small [TextButton] directly
+/// beside "Sign out" in [_AccountRow], sharing one row with a completely
+/// harmless, frequently-used action. Anything irreversible (see
+/// [_DeleteAccountDialog]'s own confirmation step) reads as far riskier once
+/// it's not one misplaced tap away from something routine.
+class _DangerZoneSection extends ConsumerWidget {
+  const _DangerZoneSection();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final AuthService auth = ref.watch(authServiceProvider);
+    return StreamBuilder<User?>(
+      stream: auth.authStateChanges,
+      initialData: auth.currentUser,
+      builder: (context, snapshot) {
+        final User? user = snapshot.data ?? auth.currentUser;
+        final bool signedIn = user != null && !user.isAnonymous;
+        if (!signedIn) return const SizedBox.shrink();
+        return Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Permanently delete your account and everything synced to Firebase.',
+                style: AppTextStyles.meta(fontSize: 10.5, color: AppColors.textSecondary),
+              ),
+            ),
+            const SizedBox(width: 10),
+            OutlinedButton(
+              onPressed: () =>
+                  showDialog<void>(context: context, builder: (_) => const _DeleteAccountDialog()),
+              style: OutlinedButton.styleFrom(foregroundColor: AppColors.priorityHigh),
+              child: const Text('Delete account'),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -151,18 +196,12 @@ class _AccountRow extends ConsumerWidget {
               ),
             ),
             if (signedIn) ...[
+              // "Delete account" used to live right here, one tap away from
+              // this everyday "Sign out" button — see _DangerZoneSection at
+              // the bottom of this settings page for where it moved.
               OutlinedButton(
                 onPressed: () => auth.signOut(),
                 child: const Text('Sign out'),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => showDialog<void>(
-                  context: context,
-                  builder: (_) => const _DeleteAccountDialog(),
-                ),
-                style: TextButton.styleFrom(foregroundColor: AppColors.priorityHigh),
-                child: const Text('Delete account'),
               ),
             ] else
               OutlinedButton(
@@ -447,6 +486,18 @@ class _SignInDialogState extends ConsumerState<_SignInDialog> {
 class _SyncRow extends ConsumerWidget {
   const _SyncRow();
 
+  /// Runs [action] (one of [SyncRepository]'s push/pull/syncNow calls),
+  /// surfacing any error as a snackbar the same way every button here does.
+  Future<void> _run(BuildContext context, Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Sync failed: $e')));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final SyncRepository sync = ref.watch(syncRepositoryProvider);
@@ -455,31 +506,46 @@ class _SyncRow extends ConsumerWidget {
       builder: (context, snapshot) {
         final SyncStatus status = snapshot.data ?? SyncStatus.initial;
         final bool syncing = status.state == SyncState.syncing;
-        return Row(
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            OutlinedButton.icon(
-              onPressed: syncing
-                  ? null
-                  : () async {
-                      try {
-                        await sync.syncNow();
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context)
-                              .showSnackBar(SnackBar(content: Text('Sync failed: $e')));
-                        }
-                      }
-                    },
-              icon: syncing
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.cloud_sync_outlined, size: 16),
-              label: Text(syncing ? 'Syncing…' : 'Sync now'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // Explicit, separate Upload/Download buttons — previously
+                // this row only had a single combined "Sync now" (push then
+                // pull), which reads as one opaque action rather than two
+                // directions. `pushLocalChanges`/`pullRemoteChanges` were
+                // already implemented in FirebaseSyncRepository and reachable
+                // through it, but with no button of their own, "upload my
+                // data to Firebase" wasn't discoverable as something this
+                // app could do on its own.
+                OutlinedButton.icon(
+                  onPressed: syncing ? null : () => _run(context, sync.pushLocalChanges),
+                  icon: const Icon(Icons.cloud_upload_outlined, size: 16),
+                  label: const Text('Upload to cloud'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: syncing ? null : () => _run(context, sync.pullRemoteChanges),
+                  icon: const Icon(Icons.cloud_download_outlined, size: 16),
+                  label: const Text('Download from cloud'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: syncing ? null : () => _run(context, sync.syncNow),
+                  icon: syncing
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.cloud_sync_outlined, size: 16),
+                  label: Text(syncing ? 'Syncing…' : 'Sync now (both ways)'),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
+            const SizedBox(height: 6),
             Text(
               _statusLabel(status),
               style: AppTextStyles.meta(

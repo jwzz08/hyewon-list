@@ -114,6 +114,13 @@ abstract final class AppColors {
   /// month-view chip/bar color be chosen per-event, independent of its
   /// category. The first four reuse the category colors (so "matches its
   /// category" is still one tap away); the rest fill out the palette.
+  ///
+  /// **Correction**: this used to list both [categoryHome] and [priorityLow]
+  /// — both `0xFF4CA871`, the exact same green. Two swatches sharing one
+  /// value meant `_colorOverride == c.value` in AddItemDialog's color picker
+  /// matched both at once, so tapping either one always visually selected
+  /// two swatches together. Swapped the duplicate for a distinct olive/lime
+  /// tone so every swatch here is a unique, single-selectable color.
   static List<Color> get eventColorPalette => [
         categoryWork,
         categoryStudy,
@@ -121,7 +128,7 @@ abstract final class AppColors {
         categoryHome,
         priorityHigh,
         priorityMedium,
-        priorityLow,
+        const Color(0xFF8FA83D),
         const Color(0xFF3D9DBF),
         const Color(0xFFBF6A3D),
         const Color(0xFF6A6ABF),

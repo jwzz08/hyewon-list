@@ -263,13 +263,24 @@ Future<void> main(List<String> args) async {
       final int separator = payload.indexOf(':');
       if (separator == -1) return;
       final String kind = payload.substring(0, separator);
-      final String id = payload.substring(separator + 1);
+      final String rest = payload.substring(separator + 1);
       switch (kind) {
         case 'task':
-          container.read(pendingOpenTaskIdProvider.notifier).state = id;
+          container.read(pendingOpenTaskIdProvider.notifier).state = rest;
           container.read(currentAppScreenProvider.notifier).state = AppScreen.planner;
           break;
         case 'event':
+          // `rest` is `<id>` for a plain event's reminder, or
+          // `<id>:<occurrenceDateIso>` for a recurring-event slot reminder
+          // (see ReminderScheduler._syncRecurringEventReminders) — split off
+          // the occurrence date if present so RootShell can open the actual
+          // occurrence that fired instead of guessing the series' first date.
+          final int dateSeparator = rest.indexOf(':');
+          final String id = dateSeparator == -1 ? rest : rest.substring(0, dateSeparator);
+          final DateTime? occurrenceDate = dateSeparator == -1
+              ? null
+              : DateTime.tryParse(rest.substring(dateSeparator + 1));
+          container.read(pendingOpenEventOccurrenceDateProvider.notifier).state = occurrenceDate;
           container.read(pendingOpenEventIdProvider.notifier).state = id;
           container.read(currentAppScreenProvider.notifier).state = AppScreen.month;
           break;

@@ -128,16 +128,31 @@ class _RootShellState extends ConsumerState<RootShell> {
     _pendingEventSub = ref.listenManual<String?>(pendingOpenEventIdProvider, (previous, next) async {
       if (next == null) return;
       ref.read(pendingOpenEventIdProvider.notifier).state = null;
+      // Set alongside the id above (see main.dart's onTapped listener) —
+      // read and clear it here too so a later plain-event tap doesn't
+      // accidentally reuse a stale date from a previous recurring one.
+      final DateTime? occurrenceDate = ref.read(pendingOpenEventOccurrenceDateProvider);
+      ref.read(pendingOpenEventOccurrenceDateProvider.notifier).state = null;
       final event = await ref.read(calendarEventRepositoryProvider).getById(next);
       if (event != null && mounted) {
-        _navigateToEventDate(event);
+        // For a recurring series, prefer the occurrence date the reminder
+        // actually fired for (see pendingOpenEventOccurrenceDateProvider's
+        // doc comment) over the series' own startDateTime — otherwise
+        // editing "this occurrence" from the notification silently applied
+        // to the wrong (usually long-past) date instead of the one shown in
+        // the toast.
+        final DateTime occStart = occurrenceDate ?? event.startDateTime;
+        final DateTime occEnd = occurrenceDate == null
+            ? event.endDateTime
+            : occurrenceDate.add(event.duration);
+        _navigateToEventDate(event, occurrenceDate: occurrenceDate);
         await showEditEventDialog(
           context,
           CalendarEventOccurrence(
             sourceEvent: event,
-            occurrenceStart: event.startDateTime,
-            occurrenceEnd: event.endDateTime,
-            isGeneratedRecurrence: false,
+            occurrenceStart: occStart,
+            occurrenceEnd: occEnd,
+            isGeneratedRecurrence: occurrenceDate != null && event.isRecurring,
           ),
         );
       }
@@ -158,16 +173,15 @@ class _RootShellState extends ConsumerState<RootShell> {
   }
 
   /// Same idea as [_navigateToTaskDate], for the month view (see
-  /// month_providers.dart). Uses [CalendarEvent.startDateTime] — for a
-  /// recurring series this is the *first* occurrence's date, not
-  /// necessarily the specific occurrence whose reminder just fired (the
-  /// notification payload only carries the series id, not which
-  /// occurrence — see ReminderScheduler's slot-based scheduling), matching
-  /// the same simplification `showEditEventDialog`'s call site above
-  /// already makes for the dialog's own occurrence data.
-  void _navigateToEventDate(CalendarEvent event) {
-    ref.read(selectedMonthAnchorProvider.notifier).state = event.startDateTime;
-    ref.read(selectedDateProvider.notifier).state = event.startDateTime;
+  /// month_providers.dart). [occurrenceDate] — the actual occurrence a
+  /// recurring event's reminder fired for, when known (see
+  /// pendingOpenEventOccurrenceDateProvider) — is preferred over
+  /// [CalendarEvent.startDateTime], which for a recurring series is only
+  /// ever the *first* occurrence's date.
+  void _navigateToEventDate(CalendarEvent event, {DateTime? occurrenceDate}) {
+    final DateTime date = occurrenceDate ?? event.startDateTime;
+    ref.read(selectedMonthAnchorProvider.notifier).state = date;
+    ref.read(selectedDateProvider.notifier).state = date;
   }
 
   void _wireWindowListeners() {

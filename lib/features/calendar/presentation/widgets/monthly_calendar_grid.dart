@@ -39,6 +39,11 @@ class MonthlyCalendarGrid extends ConsumerWidget {
         ref.watch(monthEventsProvider).value ?? const <CalendarEventOccurrence>[];
     final List<Holiday> holidays = ref.watch(monthHolidaysProvider);
     final double textScale = ref.watch(appSettingsProvider).value?.monthItemTextScale ?? 1.3;
+    // Must match monthGridDatesProvider's own column order (see
+    // AppDateUtils.weekdayLabelsFrom's doc comment) — a hardcoded Mon-Sun
+    // header silently mislabeled every column once the grid itself shifted
+    // for a Sunday-start setting.
+    final int startDayOfWeek = ref.watch(startDayOfWeekProvider);
 
     final List<CalendarEventOccurrence> multiDayEvents = events
         .where((o) => AppDateUtils.isMultiDaySpan(o.occurrenceStart, o.occurrenceEnd))
@@ -54,7 +59,7 @@ class MonthlyCalendarGrid extends ConsumerWidget {
     return Column(
       children: [
         Row(
-          children: AppDateUtils.weekdayShortLabels
+          children: AppDateUtils.weekdayLabelsFrom(startDayOfWeek)
               .map(
                 (label) => Expanded(
                   child: Center(child: Text(label, style: AppTextStyles.sectionLabel())),
