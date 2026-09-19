@@ -7,7 +7,10 @@ import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../domain/models/calendar_event.dart';
 import '../../../../domain/models/task.dart';
+import '../../../../shared/widgets/components/add_item_dialog.dart';
 import '../../../../shared/widgets/components/progress_ring.dart';
+import '../../../../shared/widgets/components/task_row.dart';
+import '../../../tasks/application/task_providers.dart';
 import '../../application/planner_providers.dart';
 
 /// Left sidebar of the weekly planner: week progress ring, "needs
@@ -26,6 +29,21 @@ class _WeeklySummaryPanelState extends ConsumerState<WeeklySummaryPanel> {
   // count isn't actionable on its own.
   bool _overdueExpanded = false;
   bool _eventsExpanded = false;
+
+  final TextEditingController _memoController = TextEditingController();
+
+  @override
+  void dispose() {
+    _memoController.dispose();
+    super.dispose();
+  }
+
+  void _submitMemo() {
+    final String title = _memoController.text.trim();
+    if (title.isEmpty) return;
+    ref.read(taskActionsProvider).createQuickTask(title);
+    _memoController.clear();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +82,8 @@ class _WeeklySummaryPanelState extends ConsumerState<WeeklySummaryPanel> {
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+            _MemoCard(controller: _memoController, onSubmit: _submitMemo),
             const SizedBox(height: 12),
             _Card(
               child: Column(
@@ -198,6 +218,118 @@ class _WeeklySummaryPanelState extends ConsumerState<WeeklySummaryPanel> {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Undated to-dos — things that need doing but don't belong to any
+/// particular day. Doubles as a drop target: dragging a task from any day
+/// column in here clears its due date (see [WeeklyDayColumn]'s matching
+/// `DragTarget<Object>` for the reverse direction — dragging a memo item
+/// back onto a day column already works unmodified, since it's just another
+/// `Draggable<Task>` and that column's target already accepts any `Task`).
+class _MemoCard extends ConsumerWidget {
+  const _MemoCard({required this.controller, required this.onSubmit});
+
+  final TextEditingController controller;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final List<Task> undated = ref.watch(undatedTasksProvider).value ?? const <Task>[];
+
+    return _Card(
+      child: DragTarget<Object>(
+        onWillAcceptWithDetails: (details) => details.data is Task,
+        onAcceptWithDetails: (details) {
+          final Task task = details.data as Task;
+          ref.read(taskActionsProvider).moveToDate(task.id, null);
+        },
+        builder: (context, candidateData, rejectedData) {
+          final bool isDragOver = candidateData.isNotEmpty;
+          return Container(
+            decoration: BoxDecoration(
+              color: isDragOver ? AppColors.dragOverTint : null,
+              borderRadius: BorderRadius.circular(AppRadii.sm),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('MEMO', style: AppTextStyles.sectionLabel()),
+                const SizedBox(height: 2),
+                Text(
+                  'No-date to-dos — drag a task here to unschedule it.',
+                  style: AppTextStyles.meta(fontSize: 9.5),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: controller,
+                        onSubmitted: (_) => onSubmit(),
+                        decoration: const InputDecoration(
+                          hintText: 'Jot something down…',
+                          isDense: true,
+                          border: InputBorder.none,
+                        ),
+                        style: AppTextStyles.body(fontSize: 12),
+                      ),
+                    ),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(AppRadii.pill),
+                      onTap: onSubmit,
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(Icons.add_circle_outline, size: 16, color: AppColors.textFaint),
+                      ),
+                    ),
+                  ],
+                ),
+                if (undated.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Text('Nothing here yet', style: AppTextStyles.meta(fontSize: 10)),
+                  )
+                else
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: undated
+                          .map((Task t) => Draggable<Task>(
+                                data: t,
+                                feedback: Opacity(
+                                  opacity: 0.35,
+                                  child: SizedBox(
+                                    width: 200,
+                                    child: Material(
+                                      color: Colors.transparent,
+                                      child: TaskRow(task: t, dense: true, onToggle: (_) {}),
+                                    ),
+                                  ),
+                                ),
+                                childWhenDragging: Opacity(
+                                  opacity: 0.3,
+                                  child: TaskRow(task: t, dense: true, onToggle: (_) {}),
+                                ),
+                                child: TaskRow(
+                                  task: t,
+                                  dense: true,
+                                  titleMaxLines: 2,
+                                  onToggle: (v) =>
+                                      ref.read(taskActionsProvider).setCompleted(t.id, v),
+                                  onTap: () => showEditTaskDialog(context, t),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }

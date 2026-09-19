@@ -54,10 +54,15 @@ Future<void> showAddItemDialog(
   BuildContext context, {
   DateTime? initialDate,
   AddItemType initialType = AddItemType.task,
+  String? initialTitle,
 }) {
   return showDialog<void>(
     context: context,
-    builder: (_) => AddItemDialog(initialDate: initialDate, initialType: initialType),
+    builder: (_) => AddItemDialog(
+      initialDate: initialDate,
+      initialType: initialType,
+      initialTitle: initialTitle,
+    ),
   );
 }
 
@@ -87,12 +92,19 @@ class AddItemDialog extends ConsumerStatefulWidget {
     super.key,
     this.initialDate,
     this.initialType = AddItemType.task,
+    this.initialTitle,
     this.editingTask,
     this.editingOccurrence,
   });
 
   final DateTime? initialDate;
   final AddItemType initialType;
+
+  /// Pre-fills the title field for a brand-new item — used by QuickAddBar's
+  /// "+" button so text already typed into the composer isn't lost when it
+  /// hands off to this full dialog instead of quick-adding. Ignored when
+  /// editing (the title comes from [editingTask]/[editingOccurrence] then).
+  final String? initialTitle;
 
   /// Non-null when editing an existing task instead of creating a new one.
   final Task? editingTask;
@@ -208,6 +220,9 @@ class _AddItemDialogState extends ConsumerState<AddItemDialog> {
     }
 
     _type = widget.initialType;
+    if (widget.initialTitle != null && widget.initialTitle!.isNotEmpty) {
+      _titleCtrl.text = widget.initialTitle!;
+    }
   }
 
   @override

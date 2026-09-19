@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:path/path.dart' as p;
 import 'package:tray_manager/tray_manager.dart';
 
+import '../../core/utils/app_log.dart';
 import '../window/window_service.dart';
 import '../windows_native/windows_native_service.dart';
 import 'tray_service.dart';
@@ -66,6 +67,11 @@ class WindowsTrayService with TrayListener implements TrayService {
         checked: _nativeService.isStartWithWindowsEnabled(),
       ),
       MenuItem.separator(),
+      // Points at the same AppLog.directory every startup log line since
+      // main.dart writes to — a self-service way to grab diagnostics for a
+      // bug report without needing to type out %LOCALAPPDATA%\hyewon_list
+      // by hand or know it exists at all.
+      MenuItem(key: 'open_log_folder', label: 'Open log folder'),
       MenuItem(key: 'quit', label: 'Quit'),
     ]));
   }
@@ -92,9 +98,29 @@ class WindowsTrayService with TrayListener implements TrayService {
       case 'toggle_start_with_windows':
         _toggleStartWithWindows();
         break;
+      case 'open_log_folder':
+        _openLogFolder();
+        break;
       case 'quit':
         _windowService.close();
         break;
+    }
+  }
+
+  /// Opens `%LOCALAPPDATA%\hyewon_list` in Explorer — the same folder
+  /// AppLog writes `app.log` to (and the SQLite DB lives in). Creating the
+  /// directory first covers the edge case of clicking this before AppLog has
+  /// written anything yet, so it's never just a silent no-op.
+  Future<void> _openLogFolder() async {
+    try {
+      final Directory? dir = AppLog.directory;
+      if (dir == null) return;
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
+      await Process.run('explorer.exe', [dir.path]);
+    } catch (_) {
+      // Best-effort — worst case nothing happens on click.
     }
   }
 

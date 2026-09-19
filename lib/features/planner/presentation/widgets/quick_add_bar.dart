@@ -10,11 +10,11 @@ import '../../../tasks/application/task_providers.dart';
 import '../../application/planner_providers.dart';
 
 /// The weekly planner's composer bar: text input + 7 day-letter chips to
-/// pick the target day + an "Add" button. The inline row stays a fast
-/// *task*-only path (one line has no room for event time fields) — the
-/// tune icon next to "Add" opens the full [AddItemDialog] so a To-do or
-/// Schedule with full detail can be created from this bar too, on the
-/// currently-selected day chip.
+/// pick the target day + an "Add" button. The "+" button opens the full
+/// [AddItemDialog] (To-do or Schedule, with full detail) pre-filled with
+/// whatever was typed and the currently-selected day chip — pressing Enter
+/// in the text field is the separate fast path (a plain quick-add task,
+/// no dialog).
 class QuickAddBar extends ConsumerStatefulWidget {
   const QuickAddBar({super.key});
 
@@ -25,6 +25,21 @@ class QuickAddBar extends ConsumerStatefulWidget {
 class _QuickAddBarState extends ConsumerState<QuickAddBar> {
   final TextEditingController _controller = TextEditingController();
   int _selectedDayIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    // Default to *today's* column instead of always index 0 (Monday, or
+    // whatever the week's first day is) — index 0 only made sense as a
+    // placeholder; today is the day someone opening the planner is almost
+    // always adding something for. Computed once here (not on every build)
+    // so it doesn't fight with a day chip the user has since tapped
+    // themselves — see the focusedDayProvider sync in build() below, which
+    // still takes priority whenever it's set.
+    final DateTime weekStart = ref.read(weekStartProvider);
+    final int todayIdx = AppDateUtils.dateOnly(DateTime.now()).difference(weekStart).inDays;
+    if (todayIdx >= 0 && todayIdx < 7) _selectedDayIndex = todayIdx;
+  }
 
   @override
   void dispose() {
@@ -95,7 +110,13 @@ class _QuickAddBarState extends ConsumerState<QuickAddBar> {
             width: 30,
             height: 30,
             child: ElevatedButton(
-              onPressed: () => _submit(weekStart),
+              // Used to just duplicate what Enter already does (a plain
+              // quick-add task) — now opens the same full To-do/Schedule
+              // dialog the removed tune button used to, pre-filled with
+              // whatever's already typed and the selected day chip, so it's
+              // the "I want the full options" path and Enter stays the fast
+              // one-line path.
+              onPressed: () => _openFullDialog(weekStart),
               style: ElevatedButton.styleFrom(
                 shape: const CircleBorder(),
                 padding: EdgeInsets.zero,
@@ -103,22 +124,6 @@ class _QuickAddBarState extends ConsumerState<QuickAddBar> {
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
               child: const Icon(Icons.add, size: 16),
-            ),
-          ),
-          // Previously a bare GestureDetector around just a 15px icon with
-          // 6px of left padding only — a ~21x15px hit target that was easy
-          // to miss with a mouse and read as "doesn't respond to clicks".
-          // InkWell + generous padding on all sides gives a much larger,
-          // visually-confirmed (splash/highlight) tap target instead.
-          InkWell(
-            borderRadius: BorderRadius.circular(AppRadii.pill),
-            onTap: () => showAddItemDialog(
-              context,
-              initialDate: weekStart.add(Duration(days: _selectedDayIndex)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: Icon(Icons.tune, size: 16, color: AppColors.textFaint),
             ),
           ),
         ],
@@ -131,6 +136,16 @@ class _QuickAddBarState extends ConsumerState<QuickAddBar> {
     if (title.isEmpty) return;
     final DateTime targetDay = weekStart.add(Duration(days: _selectedDayIndex));
     ref.read(taskActionsProvider).createQuickTask(title, dueDate: targetDay);
+    _controller.clear();
+  }
+
+  void _openFullDialog(DateTime weekStart) {
+    final String typed = _controller.text.trim();
+    showAddItemDialog(
+      context,
+      initialDate: weekStart.add(Duration(days: _selectedDayIndex)),
+      initialTitle: typed.isEmpty ? null : typed,
+    );
     _controller.clear();
   }
 }

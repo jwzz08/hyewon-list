@@ -148,8 +148,13 @@ class WeeklyDayColumn extends ConsumerWidget {
                     onTap: () => showAddItemDialog(context,
                         initialDate: day, initialType: AddItemType.event),
                     child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(Icons.add_circle_outline, size: 16, color: AppColors.textFaint),
+                      // Bumped up from size:16/padding:4 (~24x24 total) —
+                      // still read as too small/hard to spot against the
+                      // card's border. A visibly bigger icon in a bigger tap
+                      // target (~34x34) reads as an actual button instead of
+                      // a stray dot in the corner.
+                      padding: const EdgeInsets.all(7),
+                      child: Icon(Icons.add_circle_outline, size: 20, color: AppColors.textSecondary),
                     ),
                   ),
                 ),

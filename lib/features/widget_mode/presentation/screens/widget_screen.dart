@@ -6,6 +6,7 @@ import 'package:window_manager/window_manager.dart';
 
 import '../../../../app/providers.dart';
 import '../../../../domain/models/theme_preset.dart';
+import '../../../../platform/window/window_service.dart';
 import '../../../settings/application/settings_providers.dart';
 import '../../../settings/application/theme_preset_providers.dart';
 import '../../application/widget_mode_providers.dart';
@@ -180,17 +181,19 @@ class _ExpandButton extends ConsumerWidget {
     // Unlabeled by design (the widget has no room for text chrome), which
     // read as "what is this circle?" with no way to find out short of
     // clicking it — a hover Tooltip answers that without adding any visible
-    // chrome to the frame itself. The visible black circular backdrop that
-    // used to sit behind the icon at rest was removed per feedback — just
-    // the icon now, with only a subtle ripple on actual interaction (the
-    // transparent Material below still gives InkWell a valid ink surface to
-    // splash onto without painting anything when idle).
+    // chrome to the frame itself. Uses the active preset's own
+    // [ThemePreset.textColor] (already tuned to read against that preset's
+    // background — same color the rest of the widget's text uses) rather
+    // than a fixed white + shadow, so it stays legible without needing a
+    // blurred halo to fake contrast.
     return Tooltip(
       message: 'Expand to full window',
       child: Material(
         type: MaterialType.transparency,
         child: InkWell(
-          customBorder: const CircleBorder(),
+          hoverColor: Colors.transparent,
+          splashColor: Colors.transparent,
+          highlightColor: Colors.transparent,
           // RootShell's chromeless-vs-nav-chrome decision is driven by
           // MediaQuery (the real Flutter viewport size), not
           // currentWindowSizeProvider, so there's nothing to optimistically
@@ -198,29 +201,36 @@ class _ExpandButton extends ConsumerWidget {
           // actually finishes resizing and Flutter's next frame reports the
           // new viewport, which for a single setSize call is effectively
           // instant.
-          onTap: () {
-            // Remember the widget's size right before jumping to the big
-            // nav-chrome window so the reverse "shrink back" button (see
-            // _ShrinkToWidgetButton in custom_window_title_bar.dart) can
-            // restore exactly this, instead of some arbitrary fixed size.
+          onTap: () async {
+            // Remember the widget's size AND position right before jumping
+            // to the big nav-chrome window so the reverse "shrink back"
+            // button (see _ShrinkToWidgetButton in
+            // custom_window_title_bar.dart) can restore both exactly,
+            // instead of some arbitrary fixed size and wherever the OS
+            // happens to leave the window after two resizes (see
+            // lastWidgetPositionProvider's doc comment).
+            final WindowService windowService = ref.read(windowServiceProvider);
             ref.read(lastWidgetSizeProvider.notifier).state =
                 ref.read(currentWindowSizeProvider);
-            ref.read(windowServiceProvider).setSize(WidgetScreen.menuBarModeSize);
+            try {
+              ref.read(lastWidgetPositionProvider.notifier).state =
+                  await windowService.getPosition();
+            } catch (_) {
+              // Best-effort — worst case the shrink-back button falls back
+              // to not restoring position, same as before this fix.
+            }
+            await windowService.setSize(WidgetScreen.menuBarModeSize);
           },
           child: Padding(
             padding: const EdgeInsets.all(6),
-            // White + a dark shadow (rather than plain white, which relied
-            // on the now-removed black circle for contrast) keeps this
-            // readable over any glass-frame background color/theme preset —
-            // same trick as the preset color-swatch checkmark.
+            // The active preset's own text color — already chosen to read
+            // clearly against that preset's background (see
+            // AppearanceSettingsSection), so it stays legible across every
+            // preset without needing a shadow to fake contrast.
             child: Icon(
               Icons.open_in_full,
               size: 14,
-              color: Colors.white.withOpacity(0.9),
-              shadows: const [
-                Shadow(color: Colors.black54, blurRadius: 3),
-                Shadow(color: Colors.black54, offset: Offset(0.5, 0.5)),
-              ],
+              color: Color(ref.watch(activeThemePresetProvider).textColor).withOpacity(0.75),
             ),
           ),
         ),

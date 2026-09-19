@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/constants/app_colors.dart';
+import '../../../../core/constants/app_dimens.dart';
 import '../../../../core/constants/app_text_styles.dart';
 import '../../../../core/utils/date_utils.dart';
 import '../../../../domain/models/calendar_event.dart';
@@ -279,20 +280,34 @@ class _CellChip extends StatelessWidget {
     );
   }
 
+  // Was a plain square-cornered box with a flat left accent border — read as
+  // "just a rectangle" per feedback. A fully-rounded pill with a small
+  // leading color dot (instead of the border) is a softer, friendlier shape
+  // at this chip's small size without losing the at-a-glance color coding.
   Widget _chip({required Color color, required Widget child}) {
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
         width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+        margin: const EdgeInsets.only(bottom: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.10),
-          border: Border(left: BorderSide(color: color, width: 2.5)),
-          borderRadius: BorderRadius.circular(4),
+          color: color.withOpacity(0.14),
+          borderRadius: BorderRadius.circular(AppRadii.pill),
         ),
-        child: child,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 5,
+              height: 5,
+              margin: const EdgeInsets.only(right: 4),
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            ),
+            Expanded(child: child),
+          ],
+        ),
       ),
     );
   }

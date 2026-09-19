@@ -6,6 +6,7 @@ import '../../../app/providers.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
 import '../../../features/widget_mode/application/widget_mode_providers.dart';
+import '../../../platform/window/window_service.dart';
 
 /// Frameless-window title bar (drag-to-move region + minimize/maximize/close).
 /// Only shown in the "full app" screens (planner/month/settings/search) —
@@ -65,8 +66,24 @@ class _ShrinkToWidgetButton extends ConsumerWidget {
     return _TitleBarButton(
       icon: Icons.close_fullscreen,
       onTap: () async {
+        final WindowService windowService = ref.read(windowServiceProvider);
         final Size target = ref.read(lastWidgetSizeProvider) ?? const Size(360, 480);
-        await ref.read(windowServiceProvider).setSize(target);
+        await windowService.setSize(target);
+        // Restore the exact spot the widget was at before it was expanded
+        // (see lastWidgetPositionProvider's doc comment) — without this,
+        // resizing down doesn't reliably leave the window where it started,
+        // which read as "Lock position doesn't work" even though that
+        // setting (setMovable) was never meant to cover a resize-induced
+        // move in the first place.
+        final Offset? targetPosition = ref.read(lastWidgetPositionProvider);
+        if (targetPosition != null) {
+          try {
+            await windowService.setPosition(targetPosition);
+          } catch (_) {
+            // Best-effort — worst case the window just lands wherever the
+            // resize left it, same as before this fix.
+          }
+        }
       },
     );
   }

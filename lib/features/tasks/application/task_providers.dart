@@ -17,6 +17,22 @@ final StreamProvider<List<Task>> overdueTasksProvider =
 final StreamProvider<List<Task>> completedTasksProvider =
     StreamProvider<List<Task>>((ref) => ref.watch(taskRepositoryProvider).watchCompleted());
 
+/// Tasks with no due date at all — the planner's "memo" list (see
+/// WeeklySummaryPanel's MEMO section), for stray to-dos that don't belong to
+/// any particular day. Completed ones are kept (struck through, sorted
+/// last) rather than hidden, mirroring WeeklyTaskSection's convention.
+final Provider<AsyncValue<List<Task>>> undatedTasksProvider =
+    Provider<AsyncValue<List<Task>>>((ref) {
+  return ref.watch(allTasksProvider).whenData((tasks) {
+    final List<Task> undated = tasks.where((t) => t.dueDate == null).toList()
+      ..sort((a, b) {
+        final int byDone = (a.isCompleted ? 1 : 0).compareTo(b.isCompleted ? 1 : 0);
+        return byDone != 0 ? byDone : b.createdAt.compareTo(a.createdAt);
+      });
+    return undated;
+  });
+});
+
 final StreamProvider<List<Task>> todayTasksProvider = StreamProvider<List<Task>>((ref) {
   final DateTime todayStart = AppDateUtils.dateOnly(DateTime.now());
   final DateTime todayEnd = todayStart.add(const Duration(hours: 23, minutes: 59, seconds: 59));

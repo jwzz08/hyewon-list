@@ -106,41 +106,77 @@ LazyDatabase _openConnection() {
   });
 }
 
-/// AppData/Local (`getApplicationSupportDirectory` on Windows) rather than
-/// the Documents folder the DB used to live in. Documents is a very common
-/// OneDrive "Known Folder Move" sync target — once the DB file actually has
-/// real content (not just a nearly-empty fresh file), opening it during a
-/// very early auto-start-at-boot launch can race OneDrive still mounting/
-/// hydrating that file, stalling the open for a long time or indefinitely.
-/// That's exactly what caused hyewon_list to launch with no visible window
-/// after a reboot once real tasks/events existed, and why deleting
-/// `Documents\hyewon_list` "fixed" it (a fresh, non-stalled file). AppData/
-/// Local isn't a Known Folder Move target by default, sidestepping the
-/// whole class of problem rather than just working around one symptom.
+/// **Correction**: this used to call `getApplicationSupportDirectory()` and
+/// (wrongly) claimed that resolved to AppData\**Local**. It actually
+/// resolves to `%APPDATA%\<CompanyName>\<ProductName>` — AppData\**Roaming**
+/// — which is itself a sync-prone location by Windows' own design (that's
+/// the entire distinction between Local and Roaming: Roaming is meant to
+/// follow the user across machines on a domain, via Enterprise State
+/// Roaming, or via a broadened OneDrive backup scope). That's almost
+/// certainly why the original Documents-folder bug (invisible window after
+/// a reboot once real data existed) came back once enough new data had been
+/// added again — it was never actually fixed, just moved to another
+/// roam-by-design folder that hadn't accumulated enough "hot" data yet to
+/// re-trigger the same stall.
+///
+/// `%LOCALAPPDATA%` (read directly as a plain environment variable — every
+/// Windows process gets it in its environment block at creation, GUI apps
+/// launched via the registry Run key included, so this is a synchronous,
+/// zero-I/O lookup that can't itself stall) is the actual machine-local,
+/// never-roamed folder: excluded from Windows roaming profiles, Enterprise
+/// State Roaming, and OneDrive Known Folder Move by design, not just by
+/// today's configuration.
 Future<File> _resolveDbFile() async {
-  final Directory supportDir = await getApplicationSupportDirectory();
+  final Directory supportDir = await _resolveLocalAppDataDir();
   final Directory dbFolder = Directory(p.join(supportDir.path, 'hyewon_list'));
   if (!await dbFolder.exists()) {
     await dbFolder.create(recursive: true);
   }
   final File newDbFile = File(p.join(dbFolder.path, 'hyewon_list.sqlite'));
 
-  // One-time migration for an existing install: its data still lives at the
-  // old Documents-based path the very first time this runs post-update —
-  // move it over so nobody's existing tasks/events/settings appear to
-  // vanish. Best-effort: any failure here just means starting from a fresh
-  // empty DB, same as a brand-new install, rather than blocking startup.
+  // One-time migration for an existing install: its data may still live at
+  // one of two older locations — the AppData\Roaming path this file used
+  // until the correction above, or (for anyone who never even got that far)
+  // the original Documents-based path. Move whichever is found over so
+  // nobody's existing tasks/events/settings appear to vanish. Best-effort:
+  // any failure here just means starting from a fresh empty DB, same as a
+  // brand-new install, rather than blocking startup.
   if (!await newDbFile.exists()) {
-    try {
-      final Directory oldAppDir = await getApplicationDocumentsDirectory();
-      final File oldDbFile = File(p.join(oldAppDir.path, 'hyewon_list', 'hyewon_list.sqlite'));
-      if (await oldDbFile.exists()) {
-        await oldDbFile.copy(newDbFile.path);
+    for (final Future<File?> Function() locatePrevious in [
+      _previousRoamingDbFile,
+      _previousDocumentsDbFile,
+    ]) {
+      try {
+        final File? oldDbFile = await locatePrevious();
+        if (oldDbFile != null && await oldDbFile.exists()) {
+          await oldDbFile.copy(newDbFile.path);
+          break;
+        }
+      } catch (_) {
+        // See doc comment above — non-fatal, try the next candidate.
       }
-    } catch (_) {
-      // See doc comment above — non-fatal.
     }
   }
 
   return newDbFile;
+}
+
+Future<Directory> _resolveLocalAppDataDir() async {
+  final String? localAppData = Platform.environment['LOCALAPPDATA'];
+  if (localAppData != null && localAppData.isNotEmpty) {
+    return Directory(localAppData);
+  }
+  // Not Windows, or the env var is unexpectedly unset — fall back to the
+  // old (Roaming) behavior rather than crashing startup outright.
+  return getApplicationSupportDirectory();
+}
+
+Future<File?> _previousRoamingDbFile() async {
+  final Directory oldSupportDir = await getApplicationSupportDirectory();
+  return File(p.join(oldSupportDir.path, 'hyewon_list', 'hyewon_list.sqlite'));
+}
+
+Future<File?> _previousDocumentsDbFile() async {
+  final Directory oldAppDir = await getApplicationDocumentsDirectory();
+  return File(p.join(oldAppDir.path, 'hyewon_list', 'hyewon_list.sqlite'));
 }

@@ -65,6 +65,20 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
     case WM_FONTCHANGE:
       flutter_controller_->engine()->ReloadSystemFonts();
       break;
+    case WM_DISPLAYCHANGE:
+    case WM_DWMCOMPOSITIONCHANGED:
+      // Reboot autostart race (see main.dart's `--autostart` handling): a
+      // Run-key launch can create/show this window before the GPU/display
+      // driver stack and DWM have finished initializing, so the win32
+      // window is visible (taskbar entry and all) but the engine's first
+      // composited frame never actually lands on it. Both messages fire
+      // once the display/compositor stack genuinely settles, whenever that
+      // is - force a fresh frame then so a stuck blank window self-heals
+      // instead of relying on a fixed timing guess.
+      if (flutter_controller_) {
+        flutter_controller_->ForceRedraw();
+      }
+      break;
   }
 
   return Win32Window::MessageHandler(hwnd, message, wparam, lparam);

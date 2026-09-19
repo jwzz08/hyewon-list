@@ -33,6 +33,18 @@ final StateProvider<Size> currentWindowSizeProvider =
 /// (i.e. the user never actually shrunk from a widget this session).
 final StateProvider<Size?> lastWidgetSizeProvider = StateProvider<Size?>((ref) => null);
 
+/// Same idea as [lastWidgetSizeProvider], for the window's on-screen
+/// position. Without this, the widget's spot on screen could drift every
+/// time it was expanded and shrunk back — `WindowService.setSize` isn't
+/// guaranteed to leave the window's top-left corner exactly where it was
+/// (a `Lock position` toggle only blocks *manual* dragging, via
+/// `setMovable`; it does nothing to protect against a resize call moving
+/// things). Explicitly capturing the position right before expanding and
+/// restoring it right after shrinking back (see `_ExpandButton`/
+/// `_ShrinkToWidgetButton`) pins the widget to one spot across that
+/// round-trip regardless of what the OS/window_manager did internally.
+final StateProvider<Offset?> lastWidgetPositionProvider = StateProvider<Offset?>((ref) => null);
+
 final Provider<WidgetTier> widgetTierProvider = Provider<WidgetTier>((ref) {
   final double width = ref.watch(currentWindowSizeProvider).width;
   if (width < WidgetTierBreakpoints.compactMax) return WidgetTier.compact;
