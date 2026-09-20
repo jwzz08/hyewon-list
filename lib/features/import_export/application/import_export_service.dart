@@ -21,6 +21,7 @@ import '../../../domain/repositories/category_repository.dart';
 import '../../../domain/repositories/tag_repository.dart';
 import '../../../domain/repositories/task_repository.dart';
 import '../../../domain/repositories/theme_preset_repository.dart';
+import '../../../platform/platform_info.dart';
 
 /// Bump whenever the JSON export shape changes, and keep
 /// `AppDatabase.migration` (data/local/database/database.dart) in lockstep.
@@ -84,8 +85,12 @@ class ImportExportService {
       fileName: 'hyewon_list_export_${DateTime.now().millisecondsSinceEpoch}.json',
       type: FileType.custom,
       allowedExtensions: ['json'],
+      // Android/iOS: file_picker requires the bytes up front and writes the
+      // file itself; desktop returns just a path that we write to below.
+      bytes: isMobilePlatform ? utf8.encode(jsonStr) : null,
     );
     if (path == null) return null;
+    if (isMobilePlatform) return path;
     final File file = File(path);
     await file.writeAsString(jsonStr);
     return file.path;
@@ -177,8 +182,10 @@ class ImportExportService {
       fileName: 'hyewon_list_tasks_${DateTime.now().millisecondsSinceEpoch}.csv',
       type: FileType.custom,
       allowedExtensions: ['csv'],
+      bytes: isMobilePlatform ? utf8.encode(csvStr) : null,
     );
     if (path == null) return null;
+    if (isMobilePlatform) return path;
     final File file = File(path);
     await file.writeAsString(csvStr);
     return file.path;
