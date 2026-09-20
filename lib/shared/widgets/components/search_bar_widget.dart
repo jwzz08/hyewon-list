@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_dimens.dart';
 import '../../../core/constants/app_text_styles.dart';
+import '../../../platform/platform_info.dart';
 
 class SearchBarWidget extends StatefulWidget {
   const SearchBarWidget({
@@ -51,6 +52,12 @@ class _SearchBarWidgetState extends State<SearchBarWidget> {
                 hintText: widget.hintText,
                 border: InputBorder.none,
                 isDense: true,
+                // The app-wide input theme is filled + bordered, which draws
+                // a second box inside this container. Drop it on mobile only
+                // (desktop keeps its existing look).
+                filled: isMobilePlatform ? false : null,
+                enabledBorder: isMobilePlatform ? InputBorder.none : null,
+                focusedBorder: isMobilePlatform ? InputBorder.none : null,
               ),
               style: AppTextStyles.body(fontSize: 13),
             ),

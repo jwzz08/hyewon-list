@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/constants/app_text_styles.dart';
-import '../../settings/presentation/widgets/appearance_settings_section.dart';
-import '../../settings/presentation/widgets/calendar_settings_section.dart';
-import '../../settings/presentation/widgets/categories_tags_settings_section.dart';
-import '../../settings/presentation/widgets/data_settings_section.dart';
 import 'mobile_common.dart';
+import 'settings/account_page.dart';
+import 'settings/appearance_page.dart';
+import 'settings/categories_page.dart';
+import 'settings/calendar_page.dart';
+import 'settings/data_pages.dart';
+import 'settings/sync_page.dart';
 
 /// "Settings" tab: a grouped list that drills into the existing (shared)
 /// settings sections. Desktop-only sections (opacity, window, Windows
@@ -37,41 +39,29 @@ class MobileSettingsScreen extends StatelessWidget {
                 _Row(
                   icon: Icons.person_outline_rounded,
                   label: 'Account',
-                  onTap: () => _open(
-                    context,
-                    'Account',
-                    const DataSettingsSection(part: DataSettingsPart.account),
-                  ),
+                  subtitle: 'Sign in, sign out',
+                  onTap: () => _open(context, 'Account', const MobileAccountPage()),
                 ),
                 _divider(),
                 _Row(
                   icon: Icons.cloud_sync_outlined,
                   label: 'Cloud sync',
-                  onTap: () => _open(
-                    context,
-                    'Cloud sync',
-                    const DataSettingsSection(part: DataSettingsPart.sync),
-                  ),
+                  subtitle: 'Sync now, upload, download',
+                  onTap: () => _open(context, 'Cloud sync', const MobileSyncPage()),
                 ),
                 _divider(),
                 _Row(
                   icon: Icons.save_alt_rounded,
                   label: 'Backup (JSON)',
-                  onTap: () => _open(
-                    context,
-                    'Backup (JSON)',
-                    const DataSettingsSection(part: DataSettingsPart.backup),
-                  ),
+                  subtitle: 'Export or import everything',
+                  onTap: () => _open(context, 'Backup (JSON)', const MobileBackupPage()),
                 ),
                 _divider(),
                 _Row(
                   icon: Icons.table_chart_outlined,
                   label: 'Tasks (CSV)',
-                  onTap: () => _open(
-                    context,
-                    'Tasks (CSV)',
-                    const DataSettingsSection(part: DataSettingsPart.csv),
-                  ),
+                  subtitle: 'Export or import tasks',
+                  onTap: () => _open(context, 'Tasks (CSV)', const MobileCsvPage()),
                 ),
               ],
             ),
@@ -83,19 +73,22 @@ class MobileSettingsScreen extends StatelessWidget {
                 _Row(
                   icon: Icons.palette_outlined,
                   label: 'Appearance',
-                  onTap: () => _open(context, 'Appearance', const AppearanceSettingsSection()),
+                  subtitle: 'Theme presets and colors',
+                  onTap: () => _open(context, 'Appearance', const MobileAppearancePage()),
                 ),
                 _divider(),
                 _Row(
                   icon: Icons.calendar_month_outlined,
                   label: 'Calendar',
-                  onTap: () => _open(context, 'Calendar', const CalendarSettingsSection()),
+                  subtitle: 'Week start, holidays, text size',
+                  onTap: () => _open(context, 'Calendar', const MobileCalendarSettingsPage()),
                 ),
                 _divider(),
                 _Row(
                   icon: Icons.label_outline_rounded,
                   label: 'Categories',
-                  onTap: () => _open(context, 'Categories', const CategoriesTagsSettingsSection()),
+                  subtitle: 'Categories and tags',
+                  onTap: () => _open(context, 'Categories', const MobileCategoriesPage()),
                 ),
               ],
             ),
@@ -109,10 +102,11 @@ class MobileSettingsScreen extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.icon, required this.label, required this.onTap});
+  const _Row({required this.icon, required this.label, required this.onTap, this.subtitle});
 
   final IconData icon;
   final String label;
+  final String? subtitle;
   final VoidCallback onTap;
 
   @override
@@ -140,6 +134,7 @@ class _Row extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(label, style: AppTextStyles.body(fontSize: 15, weight: FontWeight.w700)),
+                    if (subtitle != null) Text(subtitle!, style: AppTextStyles.meta(fontSize: 12)),
                   ],
                 ),
               ),
