@@ -54,13 +54,12 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyA4vMJFhh0Yr17QVOM3iFubfEKcpUoOKlM',
-    appId: '1:318530031288:ios:2bc19f6b9fcd2703d66e4d',
+    appId: '1:318530031288:ios:b4fc4c54d1cec07ed66e4d',
     messagingSenderId: '318530031288',
     projectId: 'hyewon-list',
     storageBucket: 'hyewon-list.firebasestorage.app',
-    iosBundleId: 'com.example.hyewonList',
+    iosBundleId: 'com.jollytech.hyewonlist',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyA4vMJFhh0Yr17QVOM3iFubfEKcpUoOKlM',
     appId: '1:318530031288:ios:2bc19f6b9fcd2703d66e4d',
