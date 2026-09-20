@@ -29,8 +29,11 @@ import '../domain/models/widget_mode.dart';
 import '../features/reminders/domain/reminder_scheduler.dart';
 import '../platform/notifications/local_notification_service.dart';
 import '../platform/notifications/notification_service.dart';
+import '../platform/platform_info.dart';
+import '../platform/tray/noop_tray_service.dart';
 import '../platform/tray/tray_service.dart';
 import '../platform/tray/windows_tray_service.dart';
+import '../platform/window/web_window_service.dart';
 import '../platform/window/window_service.dart';
 import '../platform/window/windows_window_service.dart';
 import '../platform/windows_native/global_hotkey_service.dart';
@@ -131,16 +134,20 @@ final Provider<AuthService> authServiceProvider = Provider<AuthService>((ref) =>
 // implementations.
 
 final Provider<WindowService> windowServiceProvider = Provider<WindowService>((ref) {
-  final WindowService service = WindowsWindowService();
+  // Mobile has no desktop window to manage; WebWindowService is the
+  // existing all-no-op implementation.
+  final WindowService service = isMobilePlatform ? WebWindowService() : WindowsWindowService();
   ref.onDispose(service.dispose);
   return service;
 });
 
 final Provider<TrayService> trayServiceProvider = Provider<TrayService>((ref) {
-  final TrayService service = WindowsTrayService(
-    ref.watch(windowServiceProvider),
-    ref.watch(windowsNativeServiceProvider),
-  );
+  final TrayService service = isMobilePlatform
+      ? NoopTrayService()
+      : WindowsTrayService(
+          ref.watch(windowServiceProvider),
+          ref.watch(windowsNativeServiceProvider),
+        );
   ref.onDispose(() => service.dispose());
   return service;
 });

@@ -14,8 +14,14 @@ import '../../../../domain/repositories/sync_repository.dart';
 import '../../../../shared/widgets/components/settings_section.dart';
 import '../../../import_export/application/import_export_service.dart';
 
+/// Which slice of the data settings to render. Desktop always uses [all];
+/// the mobile settings list shows each slice as its own entry.
+enum DataSettingsPart { all, account, sync, backup, csv }
+
 class DataSettingsSection extends ConsumerStatefulWidget {
-  const DataSettingsSection({super.key});
+  const DataSettingsSection({super.key, this.part = DataSettingsPart.all});
+
+  final DataSettingsPart part;
 
   @override
   ConsumerState<DataSettingsSection> createState() => _DataSettingsSectionState();
@@ -41,15 +47,10 @@ class _DataSettingsSectionState extends ConsumerState<DataSettingsSection> {
   Widget build(BuildContext context) {
     final ImportExportService service = ref.watch(importExportServiceProvider);
 
-    return SettingsSection(
-      title: 'DATA',
-      subtitle:
-          'Export/import tasks, events, categories and settings as JSON. Window position/size never leaves this device.',
-      children: [
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
+    final DataSettingsPart part = widget.part;
+    final bool all = part == DataSettingsPart.all;
+
+    final List<Widget> jsonButtons = [
             ElevatedButton.icon(
               onPressed: _busy
                   ? null
@@ -76,6 +77,8 @@ class _DataSettingsSectionState extends ConsumerState<DataSettingsSection> {
               icon: const Icon(Icons.download_outlined, size: 16),
               label: const Text('Import JSON'),
             ),
+    ];
+    final List<Widget> csvButtons = [
             OutlinedButton.icon(
               onPressed: _busy
                   ? null
@@ -102,7 +105,44 @@ class _DataSettingsSectionState extends ConsumerState<DataSettingsSection> {
               icon: const Icon(Icons.table_rows_outlined, size: 16),
               label: const Text('Import tasks from CSV'),
             ),
-          ],
+    ];
+    final Widget busyBar = _busy
+        ? const Padding(padding: EdgeInsets.only(top: 10), child: LinearProgressIndicator())
+        : const SizedBox.shrink();
+
+    switch (part) {
+      case DataSettingsPart.account:
+        return const SettingsSection(
+          title: 'ACCOUNT',
+          children: [_AccountRow(), SizedBox(height: 14), _DangerZoneSection()],
+        );
+      case DataSettingsPart.sync:
+        return const SettingsSection(title: 'CLOUD SYNC', children: [_SyncRow()]);
+      case DataSettingsPart.backup:
+        return SettingsSection(
+          title: 'BACKUP (JSON)',
+          subtitle: 'Export/import tasks, events, categories and settings as JSON.',
+          children: [Wrap(spacing: 10, runSpacing: 10, children: jsonButtons), busyBar],
+        );
+      case DataSettingsPart.csv:
+        return SettingsSection(
+          title: 'TASKS (CSV)',
+          children: [Wrap(spacing: 10, runSpacing: 10, children: csvButtons), busyBar],
+        );
+      case DataSettingsPart.all:
+        break;
+    }
+    assert(all);
+
+    return SettingsSection(
+      title: 'DATA',
+      subtitle:
+          'Export/import tasks, events, categories and settings as JSON. Window position/size never leaves this device.',
+      children: [
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: [...jsonButtons, ...csvButtons],
         ),
         if (_busy) ...[
           const SizedBox(height: 10),

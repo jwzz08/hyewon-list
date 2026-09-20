@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/constants/app_colors.dart';
 import '../domain/models/theme_preset.dart';
 import '../features/settings/application/theme_preset_providers.dart';
+import '../features/mobile/presentation/mobile_shell.dart';
+import '../platform/platform_info.dart';
 import 'root_shell.dart';
 import 'theme.dart';
 
@@ -30,7 +32,9 @@ class HyewonListApp extends ConsumerWidget {
       title: 'hyewon_list',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
-      home: RootShell(key: ValueKey('root_shell_${activePreset.id}')),
+      home: isMobilePlatform
+          ? MobileShell(key: ValueKey('mobile_shell_${activePreset.id}'))
+          : RootShell(key: ValueKey('root_shell_${activePreset.id}')),
     );
   }
 }

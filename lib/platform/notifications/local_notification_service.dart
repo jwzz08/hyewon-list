@@ -47,7 +47,15 @@ class LocalNotificationService implements NotificationService {
       // notification identity/settings off this GUID.
       guid: 'b7f2e6b0-6f2f-4c2a-9d1e-9d7a2f5f9c11',
     );
-    const InitializationSettings settings = InitializationSettings(windows: windowsSettings);
+    // iOS: asks for alert/badge/sound permission on first init (the system
+    // prompt appears once; later launches are silent).
+    const DarwinInitializationSettings darwinSettings = DarwinInitializationSettings(
+      requestAlertPermission: true,
+      requestBadgePermission: true,
+      requestSoundPermission: true,
+    );
+    const InitializationSettings settings =
+        InitializationSettings(windows: windowsSettings, iOS: darwinSettings);
     // `onDidReceiveNotificationResponse` fires whenever the user taps a
     // notification (or one of its action buttons — we don't define any, so
     // this always means "tapped the body") while the app process is alive,
@@ -114,6 +122,11 @@ class LocalNotificationService implements NotificationService {
 
   NotificationDetails _details() => const NotificationDetails(
         windows: WindowsNotificationDetails(),
+        iOS: DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
         // Android details are harmless dead weight on a Windows-only build
         // (the package is cross-platform and requires nothing extra to
         // compile) but are NOT what actually shows on this app's target

@@ -15,6 +15,7 @@ import '../../../features/calendar/application/calendar_providers.dart';
 import '../../../features/calendar/domain/recurring_event_service.dart';
 import '../../../features/categories/application/category_providers.dart';
 import '../../../features/tasks/application/task_providers.dart';
+import '../../../platform/platform_info.dart';
 import '../../utils/undo_actions.dart';
 import 'chip_selector.dart';
 import 'recurring_edit_scope_dialog.dart';
@@ -56,24 +57,41 @@ Future<void> showAddItemDialog(
   AddItemType initialType = AddItemType.task,
   String? initialTitle,
 }) {
-  return showDialog<void>(
-    context: context,
-    builder: (_) => AddItemDialog(
+  return _present(
+    context,
+    (asSheet) => AddItemDialog(
       initialDate: initialDate,
       initialType: initialType,
       initialTitle: initialTitle,
+      asSheet: asSheet,
     ),
   );
+}
+
+/// Desktop: the existing centered dialog. Mobile: the same widget rendered
+/// as a bottom sheet (`asSheet`), so both share one form/save implementation.
+Future<void> _present(BuildContext context, Widget Function(bool asSheet) builder) {
+  if (isMobilePlatform) {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      backgroundColor: AppColors.cardWhite,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => builder(true),
+    );
+  }
+  return showDialog<void>(context: context, builder: (_) => builder(false));
 }
 
 /// Opens [AddItemDialog] pre-filled with [task] and switches it into edit
 /// mode (Save updates the existing row instead of creating a new one; a
 /// Delete button appears too).
 Future<void> showEditTaskDialog(BuildContext context, Task task) {
-  return showDialog<void>(
-    context: context,
-    builder: (_) => AddItemDialog(editingTask: task),
-  );
+  return _present(context, (asSheet) => AddItemDialog(editingTask: task, asSheet: asSheet));
 }
 
 /// Opens [AddItemDialog] pre-filled with [occurrence] and switches it into
@@ -81,9 +99,9 @@ Future<void> showEditTaskDialog(BuildContext context, Task task) {
 /// so a recurring series knows *which date* is being edited — that date is
 /// what the "this event only" / "this and following" scope choice acts on.
 Future<void> showEditEventDialog(BuildContext context, CalendarEventOccurrence occurrence) {
-  return showDialog<void>(
-    context: context,
-    builder: (_) => AddItemDialog(editingOccurrence: occurrence),
+  return _present(
+    context,
+    (asSheet) => AddItemDialog(editingOccurrence: occurrence, asSheet: asSheet),
   );
 }
 
@@ -95,7 +113,12 @@ class AddItemDialog extends ConsumerStatefulWidget {
     this.initialTitle,
     this.editingTask,
     this.editingOccurrence,
+    this.asSheet = false,
   });
+
+  /// Renders as a full-width bottom-sheet body (mobile) instead of a
+  /// centered [Dialog] (desktop). Form and save logic are identical.
+  final bool asSheet;
 
   final DateTime? initialDate;
   final AddItemType initialType;
@@ -237,23 +260,41 @@ class _AddItemDialogState extends ConsumerState<AddItemDialog> {
   Widget build(BuildContext context) {
     final List<Category> categories = ref.watch(allCategoriesProvider).value ?? const <Category>[];
 
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.lg)),
-      child: ConstrainedBox(
-        constraints:
-            BoxConstraints(maxWidth: 420, maxHeight: MediaQuery.sizeOf(context).height * 0.85),
+    final String heading = _isEditing
+        ? (_type == AddItemType.task ? 'Edit to-do' : 'Edit schedule')
+        : 'Add new';
+    final Widget content = ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: widget.asSheet ? double.infinity : 420,
+          maxHeight: MediaQuery.sizeOf(context).height * (widget.asSheet ? 0.92 : 0.85),
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: widget.asSheet
+              ? const EdgeInsets.fromLTRB(20, 0, 20, 12)
+              : const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                _isEditing
-                    ? (_type == AddItemType.task ? 'Edit to-do' : 'Edit schedule')
-                    : 'Add new',
-                style: AppTextStyles.display(fontSize: 17),
-              ),
+              if (widget.asSheet)
+                Row(
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    Expanded(
+                      child: Text(
+                        heading,
+                        textAlign: TextAlign.center,
+                        style: AppTextStyles.display(fontSize: 17),
+                      ),
+                    ),
+                    ElevatedButton(onPressed: _save, child: const Text('Save')),
+                  ],
+                )
+              else
+                Text(heading, style: AppTextStyles.display(fontSize: 17)),
               const SizedBox(height: 12),
               if (!_isEditing)
                 ChipSelector<AddItemType>(
@@ -293,6 +334,19 @@ class _AddItemDialogState extends ConsumerState<AddItemDialog> {
                 ),
               ),
               const SizedBox(height: 16),
+              if (widget.asSheet)
+                (_isEditing
+                    ? SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: TextButton(
+                          onPressed: _delete,
+                          style: TextButton.styleFrom(foregroundColor: AppColors.priorityHigh),
+                          child: const Text('Delete'),
+                        ),
+                      )
+                    : const SizedBox.shrink())
+              else
               Row(
                 children: [
                   if (_isEditing)
@@ -318,7 +372,19 @@ class _AddItemDialogState extends ConsumerState<AddItemDialog> {
             ],
           ),
         ),
-      ),
+      );
+
+    if (widget.asSheet) {
+      // Lift the sheet above the keyboard.
+      return AnimatedPadding(
+        duration: const Duration(milliseconds: 150),
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+        child: content,
+      );
+    }
+    return Dialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadii.lg)),
+      child: content,
     );
   }
 

@@ -12,6 +12,7 @@ import 'domain/models/widget_mode.dart';
 import 'domain/models/widget_preference.dart';
 import 'features/widget_mode/application/widget_mode_providers.dart';
 import 'features/widget_mode/presentation/screens/widget_screen.dart';
+import 'platform/platform_info.dart';
 import 'firebase_options.dart';
 
 // `Offset`/`Size` string interpolation logged as a bare "Instance of
@@ -23,6 +24,64 @@ String _fmtOffset(Offset o) => '(${o.dx.toStringAsFixed(1)}, ${o.dy.toStringAsFi
 String _fmtSize(Size s) => '${s.width.toStringAsFixed(1)}x${s.height.toStringAsFixed(1)}';
 
 Future<void> main(List<String> args) async {
+  if (isMobilePlatform) {
+    await _runMobile();
+  } else {
+    await _runDesktop(args);
+  }
+}
+
+/// iPhone/Android entry point — none of the desktop window/tray/hotkey
+/// setup in [_runDesktop] applies here.
+Future<void> _runMobile() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Same non-fatal contract as desktop: no Firebase config just means sync
+  // reports offline, everything else works locally.
+  try {
+    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  } catch (e) {
+    debugPrint('Firebase init failed (non-fatal): $e');
+  }
+
+  final ProviderContainer container = ProviderContainer();
+
+  try {
+    final notificationService = container.read(notificationServiceProvider);
+    await notificationService.init();
+    notificationService.onTapped.listen((payload) {
+      final int separator = payload.indexOf(':');
+      if (separator == -1) return;
+      final String kind = payload.substring(0, separator);
+      final String rest = payload.substring(separator + 1);
+      switch (kind) {
+        case 'task':
+          container.read(pendingOpenTaskIdProvider.notifier).state = rest;
+          break;
+        case 'event':
+          // `<id>` or `<id>:<occurrenceDateIso>` — see the desktop listener.
+          final int dateSeparator = rest.indexOf(':');
+          final String id = dateSeparator == -1 ? rest : rest.substring(0, dateSeparator);
+          final DateTime? occurrenceDate =
+              dateSeparator == -1 ? null : DateTime.tryParse(rest.substring(dateSeparator + 1));
+          container.read(pendingOpenEventOccurrenceDateProvider.notifier).state = occurrenceDate;
+          container.read(pendingOpenEventIdProvider.notifier).state = id;
+          break;
+      }
+    });
+  } catch (e) {
+    debugPrint('notification service init failed (non-fatal): $e');
+  }
+
+  runApp(
+    UncontrolledProviderScope(
+      container: container,
+      child: const HyewonListApp(),
+    ),
+  );
+}
+
+Future<void> _runDesktop(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Runs every launch now, not just `--autostart` ones (see AppLog's doc
