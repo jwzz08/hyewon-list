@@ -56,113 +56,177 @@ class WeeklyDayColumn extends ConsumerWidget {
     // to miss next to the Overview list's much more visible accentTint row.
     final double borderWidth = (isToday || isFocused) ? 1.6 : 1.0;
 
-    return DragTarget<Object>(
-      onWillAcceptWithDetails: (details) =>
-          details.data is Task || details.data is CalendarEventOccurrence,
-      onAcceptWithDetails: (details) {
-        final Object data = details.data;
-        if (data is Task) {
-          ref.read(taskActionsProvider).moveToDate(data.id, day);
-        } else if (data is CalendarEventOccurrence) {
-          handleEventDroppedOnDay(context, ref, data, day);
-        }
-      },
-      builder: (context, candidateData, rejectedData) {
-        final bool isDragOver = candidateData.isNotEmpty;
-        return Container(
-          constraints: const BoxConstraints(minHeight: 320),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: isDragOver ? AppColors.dragOverTint : bg,
-            border: Border.all(
-              color: isDragOver ? AppColors.accent : borderColor,
-              width: isDragOver ? 1.6 : borderWidth,
-            ),
-            borderRadius: BorderRadius.circular(AppRadii.md),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Tapping the date header focuses this day — previously the
-              // only way to do this was clicking the day's row in
-              // WeeklySummaryPanel's Overview list on the far left. Stretched
-              // to the card's full width (not just hugging the text) so the
-              // whole header strip is clickable, not only the ~40px the
-              // weekday/date text itself occupies — a tap target that small
-              // in a ~168-240px-wide column read as "clicking the card
-              // doesn't do anything" if you didn't land precisely on it.
-              InkWell(
-                borderRadius: BorderRadius.circular(AppRadii.sm),
-                onTap: () => ref.read(focusedDayProvider.notifier).state = day,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        AppDateUtils.weekdayShortLabels[day.weekday - 1],
-                        style: AppTextStyles.meta(fontSize: 10, color: AppColors.textFaint),
-                      ),
-                      Text(
-                        '${day.day}',
-                        style: AppTextStyles.body(
-                          fontSize: 15,
-                          weight: FontWeight.w700,
-                          color: isToday ? AppColors.accentDark : AppColors.textBody,
-                        ),
-                      ),
-                    ],
+    // Split into two separate drop zones (To-do section vs. Schedule
+    // section) instead of one DragTarget covering the whole card — a Task
+    // dropped on the To-do half still just moves its due date here (stays a
+    // to-do), but a Task dropped on the Schedule half now converts it into
+    // a calendar event on this day (see convertTaskToEventOnDay), so a MEMO
+    // item (see WeeklySummaryPanel's `_MemoCard`) can be dragged straight
+    // into either section depending on what it should become. Both zones
+    // still accept a dragged CalendarEventOccurrence the same way the old
+    // single DragTarget did, so moving an existing event between days by
+    // dropping it anywhere in the card keeps working. Nesting one DragTarget
+    // inside another isn't safe here — Flutter calls `onAccept` on every
+    // overlapping target under the drop point, so a Task dropped on the
+    // Schedule zone would otherwise *also* fire the To-do zone's handler —
+    // hence two disjoint, non-overlapping targets rather than an outer one
+    // wrapping an inner one.
+    return Container(
+      constraints: const BoxConstraints(minHeight: 320),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border.all(color: borderColor, width: borderWidth),
+        borderRadius: BorderRadius.circular(AppRadii.md),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Tapping the date header focuses this day — previously the
+          // only way to do this was clicking the day's row in
+          // WeeklySummaryPanel's Overview list on the far left. Stretched
+          // to the card's full width (not just hugging the text) so the
+          // whole header strip is clickable, not only the ~40px the
+          // weekday/date text itself occupies — a tap target that small
+          // in a ~168-240px-wide column read as "clicking the card
+          // doesn't do anything" if you didn't land precisely on it.
+          InkWell(
+            borderRadius: BorderRadius.circular(AppRadii.sm),
+            onTap: () => ref.read(focusedDayProvider.notifier).state = day,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    AppDateUtils.weekdayShortLabels[day.weekday - 1],
+                    style: AppTextStyles.meta(fontSize: 10, color: AppColors.textFaint),
                   ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              WeeklyTaskSection(
-                tasks: tasks,
-                onToggle: (task, isCompleted) =>
-                    ref.read(taskActionsProvider).setCompleted(task.id, isCompleted),
-                onTap: (task) => showEditTaskDialog(context, task),
-                selectionMode: selectionMode,
-                selectedTaskIds: selectedTaskIds,
-                onToggleSelected: onToggleTaskSelected,
-                titleMaxLines: 2,
-              ),
-              const SizedBox(height: 10),
-              Divider(color: borderColor, height: 1),
-              const SizedBox(height: 10),
-              WeeklyScheduleSection(
-                occurrences: eventOccurrences,
-                onTap: (occurrence) => showEditEventDialog(context, occurrence),
-                titleMaxLines: 2,
-              ),
-              const Spacer(),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.only(top: 6),
-                decoration: BoxDecoration(border: Border(top: BorderSide(color: borderColor))),
-                child: Align(
-                  alignment: Alignment.centerRight,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(AppRadii.pill),
-                    onTap: () => showAddItemDialog(context,
-                        initialDate: day, initialType: AddItemType.event),
-                    child: Padding(
-                      // Bumped up from size:16/padding:4 (~24x24 total) —
-                      // still read as too small/hard to spot against the
-                      // card's border. A visibly bigger icon in a bigger tap
-                      // target (~34x34) reads as an actual button instead of
-                      // a stray dot in the corner.
-                      padding: const EdgeInsets.all(7),
-                      child: Icon(Icons.add_circle_outline, size: 20, color: AppColors.textSecondary),
+                  Text(
+                    '${day.day}',
+                    style: AppTextStyles.body(
+                      fontSize: 15,
+                      weight: FontWeight.w700,
+                      color: isToday ? AppColors.accentDark : AppColors.textBody,
                     ),
                   ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          // The To-do/Schedule content used to sit directly in this Column
+          // with a trailing `Spacer()` to push the "+" footer to the
+          // bottom — fine as long as everything fit, but neither
+          // WeeklyTaskSection nor WeeklyScheduleSection cap their own
+          // height (they're plain Columns that grow with however many
+          // rows they're given), so a day with enough tasks/events to
+          // exceed the column's available height (shrinking the window,
+          // or just a busy day) overflowed the outer RenderFlex instead of
+          // scrolling. Wrapping the pair in Expanded+SingleChildScrollView
+          // keeps the header and "+" footer always pinned in place and
+          // lets everything between them scroll instead of overflowing.
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DragTarget<Object>(
+                    onWillAcceptWithDetails: (details) =>
+                        details.data is Task || details.data is CalendarEventOccurrence,
+                    onAcceptWithDetails: (details) {
+                      final Object data = details.data;
+                      if (data is Task) {
+                        ref.read(taskActionsProvider).moveToDate(data.id, day);
+                      } else if (data is CalendarEventOccurrence) {
+                        // Symmetric with the Schedule zone's Task → event
+                        // conversion below: a schedule dropped on the To-do
+                        // zone converts into a to-do instead of just moving
+                        // the event's date (see convertEventToTaskOnDay).
+                        convertEventToTaskOnDay(context, ref, data, day);
+                      }
+                    },
+                    builder: (context, candidateData, rejectedData) {
+                      return Container(
+                        decoration: candidateData.isNotEmpty
+                            ? BoxDecoration(
+                                color: AppColors.dragOverTint,
+                                borderRadius: BorderRadius.circular(AppRadii.sm),
+                              )
+                            : null,
+                        child: WeeklyTaskSection(
+                          tasks: tasks,
+                          onToggle: (task, isCompleted) =>
+                              ref.read(taskActionsProvider).setCompleted(task.id, isCompleted),
+                          onTap: (task) => showEditTaskDialog(context, task),
+                          selectionMode: selectionMode,
+                          selectedTaskIds: selectedTaskIds,
+                          onToggleSelected: onToggleTaskSelected,
+                          titleMaxLines: 2,
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  Divider(color: borderColor, height: 1),
+                  const SizedBox(height: 10),
+                  DragTarget<Object>(
+                    onWillAcceptWithDetails: (details) =>
+                        details.data is Task || details.data is CalendarEventOccurrence,
+                    onAcceptWithDetails: (details) {
+                      final Object data = details.data;
+                      if (data is Task) {
+                        convertTaskToEventOnDay(ref, data, day);
+                      } else if (data is CalendarEventOccurrence) {
+                        handleEventDroppedOnDay(context, ref, data, day);
+                      }
+                    },
+                    builder: (context, candidateData, rejectedData) {
+                      return Container(
+                        decoration: candidateData.isNotEmpty
+                            ? BoxDecoration(
+                                color: AppColors.dragOverTint,
+                                borderRadius: BorderRadius.circular(AppRadii.sm),
+                              )
+                            : null,
+                        child: WeeklyScheduleSection(
+                          occurrences: eventOccurrences,
+                          onTap: (occurrence) => showEditEventDialog(context, occurrence),
+                          titleMaxLines: 2,
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.only(top: 6),
+            decoration: BoxDecoration(border: Border(top: BorderSide(color: borderColor))),
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(AppRadii.pill),
+                onTap: () => showAddItemDialog(context,
+                    initialDate: day, initialType: AddItemType.event),
+                child: Padding(
+                  // Bumped up from size:16/padding:4 (~24x24 total) —
+                  // still read as too small/hard to spot against the
+                  // card's border. A visibly bigger icon in a bigger tap
+                  // target (~34x34) reads as an actual button instead of
+                  // a stray dot in the corner.
+                  padding: const EdgeInsets.all(7),
+                  child: Icon(Icons.add_circle_outline, size: 20, color: AppColors.textSecondary),
                 ),
               ),
-            ],
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }

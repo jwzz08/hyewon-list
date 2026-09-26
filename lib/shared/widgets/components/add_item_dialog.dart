@@ -142,6 +142,13 @@ class AddItemDialog extends ConsumerStatefulWidget {
 
 class _AddItemDialogState extends ConsumerState<AddItemDialog> {
   late AddItemType _type;
+
+  /// The type this item actually was when the dialog opened — never
+  /// changes afterward, unlike [_type]. Used only to detect an in-progress
+  /// conversion (`_type != _originalType` while [_isEditing]) for the
+  /// explanatory caption under the type picker and for [_save]'s
+  /// convert-on-save branches.
+  late final AddItemType _originalType;
   final TextEditingController _titleCtrl = TextEditingController();
   final TextEditingController _descCtrl = TextEditingController();
   final TextEditingController _locationCtrl = TextEditingController();
@@ -197,6 +204,7 @@ class _AddItemDialogState extends ConsumerState<AddItemDialog> {
       _priority = task.priority;
       _categoryId = task.categoryId;
       _reminderMinutesBefore = task.reminderMinutesBefore;
+      _originalType = _type;
       return;
     }
 
@@ -239,13 +247,37 @@ class _AddItemDialogState extends ConsumerState<AddItemDialog> {
           _endCondition = _EndCondition.never;
         }
       }
+      _originalType = _type;
       return;
     }
 
     _type = widget.initialType;
+    _originalType = _type;
     if (widget.initialTitle != null && widget.initialTitle!.isNotEmpty) {
       _titleCtrl.text = widget.initialTitle!;
     }
+  }
+
+  /// Switches [_type], carrying the shared date/time over to whichever
+  /// field set the new type actually uses — otherwise switching type while
+  /// editing (or while creating, after already picking a date) would leave
+  /// the *other* half's date fields sitting at whatever they defaulted to
+  /// when the dialog opened, silently discarding a date the user already
+  /// set. Call inside `setState`.
+  void _changeType(AddItemType next) {
+    if (next == _type) return;
+    if (next == AddItemType.event && _type == AddItemType.task) {
+      _startDate = _dueDate ?? _startDate;
+      _endDate = _startDate;
+      if (_dueTime != null) {
+        _startTime = _dueTime!;
+        _isAllDay = false;
+      }
+    } else if (next == AddItemType.task && _type == AddItemType.event) {
+      _dueDate = _startDate;
+      _dueTime = _isAllDay ? null : _startTime;
+    }
+    _type = next;
   }
 
   @override
@@ -296,13 +328,28 @@ class _AddItemDialogState extends ConsumerState<AddItemDialog> {
               else
                 Text(heading, style: AppTextStyles.display(fontSize: 17)),
               const SizedBox(height: 12),
-              if (!_isEditing)
-                ChipSelector<AddItemType>(
-                  options: const [AddItemType.task, AddItemType.event],
-                  value: _type,
-                  labelBuilder: (t) => t == AddItemType.task ? 'To-do' : 'Schedule',
-                  onChanged: (t) => setState(() => _type = t),
+              // Shown even while editing (not just for a brand-new item) —
+              // picking the other type here converts the item: saving then
+              // deletes the original row and creates a new one of the
+              // chosen type (a to-do and a calendar event are separate
+              // domain models/tables, so there's no single row that can
+              // just change kind in place). See _save()'s
+              // convertingTaskToEvent/convertingEventToTask branches.
+              ChipSelector<AddItemType>(
+                options: const [AddItemType.task, AddItemType.event],
+                value: _type,
+                labelBuilder: (t) => t == AddItemType.task ? 'To-do' : 'Schedule',
+                onChanged: (t) => setState(() => _changeType(t)),
+              ),
+              if (_isEditing && _type != _originalType) ...[
+                const SizedBox(height: 6),
+                Text(
+                  _originalType == AddItemType.task
+                      ? 'Saving will turn this to-do into a schedule.'
+                      : 'Saving will turn this schedule into a to-do.',
+                  style: AppTextStyles.meta(fontSize: 10.5, color: AppColors.accentTextLabel),
                 ),
+              ],
               const SizedBox(height: 14),
               Flexible(
                 child: SingleChildScrollView(
@@ -838,6 +885,18 @@ class _AddItemDialogState extends ConsumerState<AddItemDialog> {
     final String? description = _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim();
     final DateTime now = DateTime.now();
 
+    // Converting an existing item to the other type — a to-do and a
+    // calendar event are separate domain models/tables, so there's no
+    // single row to just change kind on; instead this creates a new row of
+    // the chosen type from the current form and removes the old one.
+    if (_isEditing && _type != _originalType) {
+      final bool converted = _type == AddItemType.event
+          ? await _convertTaskToEvent(title, description, now)
+          : await _convertEventToTask(title, description, now);
+      if (converted && mounted) Navigator.of(context).pop();
+      return;
+    }
+
     if (_type == AddItemType.task) {
       if (widget.editingTask != null) {
         final Task updated = widget.editingTask!.copyWith(
@@ -1023,6 +1082,105 @@ class _AddItemDialogState extends ConsumerState<AddItemDialog> {
     }
 
     if (mounted) Navigator.of(context).pop();
+  }
+
+  /// Converts an editing to-do into a brand-new [CalendarEvent] built from
+  /// the form's current event fields, then deletes the original [Task].
+  /// Always succeeds (a task has no series/scope to ask about) — returns
+  /// `true` so [_save] can pop the dialog unconditionally.
+  Future<bool> _convertTaskToEvent(String title, String? description, DateTime now) async {
+    final DateTime start = _isAllDay
+        ? AppDateUtils.dateOnly(_startDate)
+        : DateTime(_startDate.year, _startDate.month, _startDate.day, _startTime.hour, _startTime.minute);
+    DateTime end = _isAllDay
+        ? AppDateUtils.dateOnly(_endDate).add(const Duration(days: 1))
+        : DateTime(_endDate.year, _endDate.month, _endDate.day, _endTime.hour, _endTime.minute);
+    if (!end.isAfter(start)) end = start.add(const Duration(hours: 1));
+
+    final bool recurring = _frequency != RecurrenceFrequency.none;
+    final String? rule = recurring
+        ? buildRecurrenceRule(
+            frequency: _frequency,
+            interval: _interval,
+            byDay: _frequency == RecurrenceFrequency.weekly ? _byDay : const {},
+            until: _endCondition == _EndCondition.onDate ? _untilDate : null,
+            count: _endCondition == _EndCondition.afterCount ? _count : null,
+          )
+        : null;
+    final String? location = _locationCtrl.text.trim().isEmpty ? null : _locationCtrl.text.trim();
+
+    final CalendarEvent event = CalendarEvent(
+      id: IdGenerator.newId(),
+      title: title,
+      description: description,
+      startDateTime: start,
+      endDateTime: end,
+      isAllDay: _isAllDay,
+      categoryId: _categoryId,
+      color: _colorOverride,
+      location: location,
+      isRecurring: recurring,
+      recurrenceRule: rule,
+      recurrenceEndDate: _endCondition == _EndCondition.onDate ? _untilDate : null,
+      recurrenceCount: _endCondition == _EndCondition.afterCount ? _count : null,
+      reminderMinutesBefore: _reminderMinutesBefore,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await ref.read(calendarEventActionsProvider).create(event);
+    await ref.read(taskActionsProvider).delete(widget.editingTask!.id);
+    return true;
+  }
+
+  /// Converts an editing schedule occurrence into a brand-new [Task] built
+  /// from the form's current to-do fields, then removes the original event.
+  /// For a recurring series this asks the same this-occurrence/this-and-
+  /// following/entire-series scope as a normal edit — a single to-do can't
+  /// represent an ongoing series, so "this and following" and "entire
+  /// series" both fall back to removing the whole series, only
+  /// "this occurrence" keeps the rest of the series intact. Returns `false`
+  /// (meaning: stay in the dialog, nothing was saved) if the scope picker is
+  /// dismissed.
+  Future<bool> _convertEventToTask(String title, String? description, DateTime now) async {
+    final CalendarEvent parent = widget.editingOccurrence!.sourceEvent;
+    final CalendarEventActions eventActions = ref.read(calendarEventActionsProvider);
+
+    if (parent.isRecurring) {
+      final EditScope? scope = await showEditScopeDialog(context, actionLabel: 'Convert to to-do');
+      if (scope == null) return false;
+      const RecurringEventService service = RecurringEventService();
+      final DateTime occurrenceDate =
+          AppDateUtils.dateOnly(widget.editingOccurrence!.occurrenceStart);
+      switch (scope) {
+        case EditScope.thisOccurrence:
+          await eventActions.update(service.applyExceptionDate(parent, occurrenceDate));
+          break;
+        case EditScope.thisAndFollowing:
+          final DateTime cutoff = occurrenceDate.subtract(const Duration(days: 1));
+          await eventActions.update(parent.copyWith(recurrenceEndDate: cutoff, updatedAt: now));
+          break;
+        case EditScope.entireSeries:
+          await eventActions.delete(parent.id);
+          break;
+      }
+    } else {
+      await eventActions.delete(parent.id);
+    }
+
+    final Task task = Task(
+      id: IdGenerator.newId(),
+      title: title,
+      description: description,
+      dueDate: _dueDate,
+      dueTimeMinutes: _dueTime == null ? null : _dueTime!.hour * 60 + _dueTime!.minute,
+      priority: _priority,
+      categoryId: _categoryId,
+      reminderMinutesBefore: _reminderMinutesBefore,
+      createdAt: now,
+      updatedAt: now,
+    );
+    await ref.read(taskActionsProvider).create(task);
+    return true;
   }
 
   /// Deletes immediately rather than showing an "are you sure?" dialog —

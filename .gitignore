@@ -33,6 +33,11 @@ migrate_working_dir/
 /build/
 /coverage/
 
+# Inno Setup installer output (windows/installer/hyewon_list.iss) — the
+# built installer .exe is a release artifact uploaded to GitHub Releases,
+# not something tracked in the repo.
+/installer_output/
+
 # Symbolication related
 app.*.symbols
 
