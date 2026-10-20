@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/utils/date_utils.dart';
 import '../../../core/utils/id_generator.dart';
 import '../../../domain/models/calendar_event.dart';
 import '../../../domain/repositories/calendar_event_repository.dart';
@@ -46,8 +47,20 @@ final ProviderFamily<AsyncValue<List<CalendarEventOccurrence>>, (DateTime, DateT
 final Provider<AsyncValue<CalendarEventOccurrence?>> nextUpcomingEventProvider =
     Provider<AsyncValue<CalendarEventOccurrence?>>((ref) {
   final DateTime now = DateTime.now();
+  // **Memory-leak fix**: the range below is the family key for
+  // [calendarOccurrencesInRangeProvider]/[calendarEventsInRangeProvider],
+  // which are non-autoDispose. It used to be `(now, now + 30 days)` with the
+  // raw, microsecond-precision `now` — so every time this provider rebuilt
+  // (which happens whenever that family entry goes loading -> data) it
+  // computed a *different* key, spun up a brand-new Drift `watch()` stream
+  // that never got disposed, whose own loading -> data change then triggered
+  // the next rebuild: an endless loop that leaked one stream (and re-ran its
+  // query on every DB write) per iteration, even with the window minimized.
+  // Keying on the date only keeps the key stable for the whole day; the
+  // "not finished yet" cut-off is applied below against the real `now`.
+  final DateTime today = AppDateUtils.dateOnly(now);
   final AsyncValue<List<CalendarEventOccurrence>> occurrencesAsync = ref.watch(
-    calendarOccurrencesInRangeProvider((now, now.add(const Duration(days: 30)))),
+    calendarOccurrencesInRangeProvider((today, today.add(const Duration(days: 30)))),
   );
   return occurrencesAsync.whenData((occurrences) {
     final List<CalendarEventOccurrence> upcoming =

@@ -23,7 +23,7 @@
 ; uninstall entry) instead of creating a second, parallel one.
 
 #define MyAppName "hyewon_list"
-#define MyAppVersion "1.0.1"
+#define MyAppVersion "1.0.2"
 #define MyAppExeName "hyewon_list.exe"
 #define MyAppPublisher "hyewon_list"
 

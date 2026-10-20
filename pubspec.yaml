@@ -3,7 +3,7 @@ description: >
   hyewon_list — a personal desktop widget-style to-do list and calendar planner.
   Local-first on Windows desktop, architected for future iOS/web sync.
 publish_to: "none"
-version: 1.0.1+2
+version: 1.0.2+3
 
 environment:
   sdk: ">=3.4.0 <4.0.0"
